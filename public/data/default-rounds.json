@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "A pint of milk from Tesco", "price": 0.85 },
+  { "id": 2, "name": "Tefal Airfryer", "price": 139.00 },
+  { "id": 3, "name": "Neil's Greggs Order", "price": 7.10 },
+  { "id": 4, "name": "The cost of one prisoner per year", "price": 53801 },
+  { "id": 5, "name": "How Much Are You Worth?", "price": 9.00 }
+]

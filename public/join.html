@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Game - TPIR Scores</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="join-container">
+    <div class="join-card">
+      <h1 class="title">🏆 Join Game</h1>
+      <form id="joinForm">
+        <div class="form-group">
+          <label for="sessionCode">Session Code</label>
+          <input type="text" id="sessionCode" maxlength="3" placeholder="429" inputmode="numeric" pattern="[0-9]*">
+        </div>
+        <div class="form-group">
+          <label for="playerName">Team Name</label>
+          <input type="text" id="playerName" placeholder="Enter your team name">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%" id="joinBtn">Join Game</button>
+        <div id="joinError" class="join-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io({
+      transports: ['websocket', 'polling']
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get('code');
+
+    if (codeParam) {
+      document.getElementById('sessionCode').value = codeParam;
+    }
+
+    document.getElementById('joinForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('sessionCode').value.trim();
+      const name = document.getElementById('playerName').value.trim();
+      const errorEl = document.getElementById('joinError');
+      const btn = document.getElementById('joinBtn');
+
+      if (!code || code.length !== 3) {
+        errorEl.textContent = 'Please enter a 3-digit session code';
+        return;
+      }
+      if (!name) {
+        errorEl.textContent = 'Please enter a team name';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Joining...';
+      errorEl.textContent = '';
+
+      socket.emit('join-session', { code, name }, (response) => {
+        if (response.success) {
+          localStorage.setItem('tpir_player_name', name);
+          localStorage.setItem('tpir_session_code', code);
+          window.location.href = `/player.html?code=${code}&name=${encodeURIComponent(name)}`;
+        } else {
+          errorEl.textContent = response.reason || 'Failed to join session';
+          btn.disabled = false;
+          btn.textContent = 'Join Game';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

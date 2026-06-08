@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TPIR Scores - Host Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">🏆 Price Is Right</h1>
+    <p class="subtitle">Scoreboard Dashboard</p>
+
+    <!-- SETUP SCREEN -->
+    <div id="setupScreen" class="screen active">
+      <div class="card">
+        <h2 class="card-title">Game Rounds</h2>
+        <p style="color:rgba(255,255,255,0.5); margin-bottom:16px; font-size:0.9rem">
+          Select which rounds to include in the game.
+        </p>
+        <table id="roundsTable">
+          <thead>
+            <tr>
+              <th style="width:60px">Include</th>
+              <th>Item</th>
+              <th style="width:120px">Price</th>
+            </tr>
+          </thead>
+          <tbody id="roundsBody"></tbody>
+        </table>
+        <div class="text-center mt-20">
+          <button class="btn btn-primary" id="createSessionBtn">Create Session</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOBBY SCREEN -->
+    <div id="lobbyScreen" class="screen">
+      <div class="card">
+        <div class="session-header">
+          <div class="session-code-box">
+            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
+            <span class="session-code" id="lobbySessionCode">---</span>
+            <button class="btn btn-danger btn-sm" id="resetSessionBtn">Reset</button>
+          </div>
+          <span id="phaseIndicator" style="color:#d4a843; font-weight:600; font-size:0.9rem; text-transform:uppercase">Lobby</span>
+        </div>
+        <div class="qr-section" id="qrSection">
+          <div id="qrCode"></div>
+          <span class="qr-url" id="qrUrl"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Players</h2>
+        <div class="player-count" id="playerCount">No players yet</div>
+        <div id="playerList"></div>
+      </div>
+
+      <div class="text-center">
+        <button class="btn btn-primary" id="startGameBtn">Start Game</button>
+      </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="gameScreen" class="screen">
+      <div class="card">
+        <div class="session-header">
+          <div class="session-code-box">
+            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
+            <span class="session-code" id="gameSessionCode" style="font-size:1.5rem">---</span>
+          </div>
+          <span id="gameRoundIndicator" style="color:#d4a843; font-weight:600; font-size:0.9rem">Round 1 of 5</span>
+        </div>
+      </div>
+
+      <div class="card text-center">
+        <div class="round-item-name" id="gameItemName">Item Name</div>
+        <div class="timer-display" id="gameTimer">0:45</div>
+        <div class="submission-count" id="submissionCount">Submitted: <span>0</span> / <span>0</span></div>
+      </div>
+
+      <div class="text-center mt-20">
+        <button class="btn btn-primary" id="startRoundBtn">Start Round</button>
+        <button class="btn btn-primary hidden" id="showResultsBtn">Show Results</button>
+      </div>
+    </div>
+
+    <!-- RESULTS SCREEN -->
+    <div id="resultsScreen" class="screen">
+      <div class="card">
+        <div class="session-header">
+          <div class="session-code-box">
+            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
+            <span class="session-code" id="resultsSessionCode" style="font-size:1.5rem">---</span>
+          </div>
+          <span id="resultsRoundLabel" style="color:#d4a843; font-weight:600; font-size:0.9rem">Round 1 Results</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title" id="resultsTitle">Results</h2>
+        <p style="color:rgba(255,255,255,0.5); margin-bottom:16px; font-size:0.9rem">
+          Actual price: <span id="actualPrice" style="color:#f5d76e; font-weight:700"></span>
+        </p>
+        <table class="results-table" id="resultsTable">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Guess</th>
+              <th>Diff</th>
+              <th>Points</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Running Scores</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th style="text-align:center">Total</th>
+            </tr>
+          </thead>
+          <tbody id="scoreTotalsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="text-center mt-20">
+        <button class="btn btn-primary" id="nextRoundBtn">Next Round</button>
+        <button class="btn btn-primary hidden" id="finalResultsBtn">View Final Results</button>
+      </div>
+    </div>
+
+    <!-- FINAL SCREEN -->
+    <div id="finalScreen" class="screen">
+      <div class="card text-center" style="border-color:#d4a843; background:rgba(212,168,67,0.05)">
+        <h2 style="font-size:2rem; color:#f5d76e; margin-bottom:8px">🏆 Final Standings 🏆</h2>
+        <p style="color:rgba(255,255,255,0.5)">All rounds complete!</p>
+      </div>
+
+      <div class="card">
+        <ul class="standings-list" id="finalStandings"></ul>
+      </div>
+
+      <div class="text-center mt-20">
+        <button class="btn btn-primary" id="newGameBtn">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="host.js"></script>
+</body>
+</html>

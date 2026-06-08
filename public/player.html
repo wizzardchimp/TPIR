@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TPIR - Player</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="player-container">
+    <div class="player-header">
+      <span class="player-session-code" id="playerSessionCode">Session: ---</span>
+      <span class="player-round-info" id="playerRoundInfo"></span>
+    </div>
+
+    <!-- WAITING SCREEN -->
+    <div id="playerWaiting" class="screen active">
+      <div class="waiting-message" style="flex:1; display:flex; flex-direction:column; justify-content:center">
+        <h2>Waiting for host...</h2>
+        <p>The game hasn't started yet or the host is reviewing results.</p>
+        <div class="waiting-spinner"></div>
+      </div>
+    </div>
+
+    <!-- GUESS SCREEN -->
+    <div id="playerGuess" class="screen player-guess-area">
+      <div class="player-round-info" id="guessRoundInfo">Round 1 of 5</div>
+      <div class="player-item-name" id="guessItemName">Item Name</div>
+      <div class="player-timer" id="guessTimer">0:45</div>
+
+      <div class="guess-input-area" style="width:100%">
+        <div class="guess-input-wrapper">
+          <span class="guess-prefix">£</span>
+          <input type="number" id="guessInput" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+        </div>
+      </div>
+
+      <button class="btn-submit" id="submitGuessBtn">Submit Guess</button>
+    </div>
+
+    <!-- RESULT SCREEN -->
+    <div id="playerResult" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center">
+      <div class="player-result">
+        <div class="result-label">Your Guess</div>
+        <div class="guess-value" id="resultGuess">£0.00</div>
+        <div style="margin:16px 0">
+          <div class="result-label">Actual Price</div>
+          <div style="font-size:1.5rem; font-weight:600; color:#fff" id="resultActual">£0.00</div>
+        </div>
+        <div style="margin:16px 0">
+          <div class="result-label">Difference</div>
+          <div style="font-size:1.2rem; font-weight:600" id="resultDiff">£0.00</div>
+        </div>
+        <div class="result-points" id="resultPoints">+0</div>
+        <div class="result-label" id="resultLabel">Points this round</div>
+        <div style="margin-top:24px">
+          <div class="result-label">Total Score</div>
+          <div style="font-size:2rem; font-weight:800; color:#f5d76e" id="resultTotal">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FINAL SCREEN -->
+    <div id="playerFinal" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center">
+      <div class="text-center" style="padding:24px">
+        <h2 style="font-size:1.8rem; color:#f5d76e; margin-bottom:16px">🏆 Game Over!</h2>
+        <div id="playerFinalRank" style="font-size:1.2rem; margin-bottom:8px"></div>
+        <div class="result-label">Your Final Score</div>
+        <div style="font-size:3rem; font-weight:800; color:#f5d76e" id="playerFinalScore">0</div>
+      </div>
+    </div>
+
+    <!-- KICKED SCREEN -->
+    <div id="playerKicked" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center">
+      <div class="text-center" style="padding:24px">
+        <h2 style="font-size:1.5rem; color:#ff4444; margin-bottom:12px">You Were Kicked</h2>
+        <p style="color:rgba(255,255,255,0.5)">The host has removed you from the session.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>
