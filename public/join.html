@@ -25,12 +25,7 @@
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io({
-      transports: ['polling', 'websocket']
-    });
-
     const params = new URLSearchParams(window.location.search);
     const codeParam = params.get('code');
 
@@ -38,7 +33,7 @@
       document.getElementById('sessionCode').value = codeParam;
     }
 
-    document.getElementById('joinForm').addEventListener('submit', async (e) => {
+    document.getElementById('joinForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const code = document.getElementById('sessionCode').value.trim();
       const name = document.getElementById('playerName').value.trim();
@@ -54,21 +49,9 @@
         return;
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Joining...';
-      errorEl.textContent = '';
-
-      socket.emit('join-session', { code, name }, (response) => {
-        if (response.success) {
-          localStorage.setItem('tpir_player_name', name);
-          localStorage.setItem('tpir_session_code', code);
-          window.location.href = `/player.html?code=${code}&name=${encodeURIComponent(name)}`;
-        } else {
-          errorEl.textContent = response.reason || 'Failed to join session';
-          btn.disabled = false;
-          btn.textContent = 'Join Game';
-        }
-      });
+      localStorage.setItem('tpir_player_name', name);
+      localStorage.setItem('tpir_session_code', code);
+      window.location.href = `/player.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`;
     });
   </script>
 </body>

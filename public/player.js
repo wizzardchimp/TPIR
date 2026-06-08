@@ -210,5 +210,12 @@ socket.on('session-reset', () => {
 });
 
 socket.on('disconnect', () => {
-  // Reconnect is automatic, player just waits
+  showPlayerScreen('playerWaiting');
+  document.querySelector('#playerWaiting h2').textContent = 'Reconnecting...';
+});
+
+socket.on('connect', () => {
+  if (sessionCode && playerName) {
+    socket.emit('join-session', { code: sessionCode, name: playerName }, () => {});
+  }
 });
