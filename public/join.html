@@ -28,7 +28,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io({
-      transports: ['polling', 'websocket']
+      transports: ['polling']
     });
 
     const params = new URLSearchParams(window.location.search);

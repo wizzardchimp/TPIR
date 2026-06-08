@@ -1,4 +1,4 @@
-const socket = io({ transports: ['polling', 'websocket'] });
+const socket = io({ transports: ['polling'] });
 
 let sessionCode = null;
 let selectedRounds = [];

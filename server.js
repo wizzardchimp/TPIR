@@ -10,9 +10,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', credentials: true },
-  transports: ['polling', 'websocket'],
+  transports: ['polling'],
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  cookie: false
 });
 
 process.on('uncaughtException', (err) => {
@@ -136,7 +137,12 @@ function calculateRoundResults(session, roundIndex) {
   return { rankings, points };
 }
 
+io.engine.on('connection_error', (err) => {
+  console.error('Socket.io engine error:', err.code, err.message, err.context);
+});
+
 io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
   let currentSessionCode = null;
   let currentPlayerName = null;
 
