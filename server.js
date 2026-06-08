@@ -16,10 +16,20 @@ const io = new Server(server, {
   pingInterval: 25000
 });
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 const PORT = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/health', (req, res) => res.send('ok'));
 
 const defaultRounds = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'public', 'data', 'default-rounds.json'), 'utf-8')
@@ -132,26 +142,31 @@ io.on('connection', (socket) => {
   let currentPlayerName = null;
 
   socket.on('create-session', async ({ rounds }, callback) => {
-    const code = generateCode();
-    const session = {
-      code,
-      rounds: rounds || defaultRounds,
-      currentRound: -1,
-      phase: 'setup',
-      players: {},
-      timer: null,
-      timerInterval: null,
-      totalScores: {}
-    };
-    sessions.set(code, session);
-    currentSessionCode = code;
-    socket.join(`host:${code}`);
+    try {
+      const code = generateCode();
+      const session = {
+        code,
+        rounds: rounds || defaultRounds,
+        currentRound: -1,
+        phase: 'setup',
+        players: {},
+        timer: null,
+        timerInterval: null,
+        totalScores: {}
+      };
+      sessions.set(code, session);
+      currentSessionCode = code;
+      socket.join(`host:${code}`);
 
-    const baseUrl = PUBLIC_URL || getLocalURL();
-    const qrUrl = `${baseUrl}/join.html?code=${code}`;
-    const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: 'transparent' } });
+      const baseUrl = PUBLIC_URL || getLocalURL();
+      const qrUrl = `${baseUrl}/join.html?code=${code}`;
+      const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
 
-    callback({ code, qrSvg, qrUrl });
+      callback({ code, qrSvg, qrUrl });
+    } catch (err) {
+      console.error('create-session error:', err);
+      callback({ error: err.message });
+    }
   });
 
   socket.on('start-game', () => {
@@ -312,42 +327,47 @@ io.on('connection', (socket) => {
   });
 
   socket.on('reset-session', async (callback) => {
-    if (!currentSessionCode) return;
-    const oldCode = currentSessionCode;
-    const session = sessions.get(oldCode);
-    if (!session) return;
+    try {
+      if (!currentSessionCode) return callback({ error: 'No session' });
+      const oldCode = currentSessionCode;
+      const session = sessions.get(oldCode);
+      if (!session) return callback({ error: 'Session not found' });
 
-    if (session.timerInterval) {
-      clearInterval(session.timerInterval);
-      session.timerInterval = null;
+      if (session.timerInterval) {
+        clearInterval(session.timerInterval);
+        session.timerInterval = null;
+      }
+
+      const newCode = generateCode();
+      sessions.delete(oldCode);
+
+      const newSession = {
+        code: newCode,
+        rounds: session.rounds,
+        currentRound: -1,
+        phase: 'setup',
+        players: {},
+        timer: null,
+        timerInterval: null,
+        totalScores: {}
+      };
+      sessions.set(newCode, newSession);
+      currentSessionCode = newCode;
+
+      socket.leave(`host:${oldCode}`);
+      socket.join(`host:${newCode}`);
+
+      io.to(`player:${oldCode}`).emit('session-reset');
+
+      const baseUrl = PUBLIC_URL || getLocalURL();
+      const qrUrl = `${baseUrl}/join.html?code=${newCode}`;
+      const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
+
+      callback({ code: newCode, qrSvg, qrUrl });
+    } catch (err) {
+      console.error('reset-session error:', err);
+      callback({ error: err.message });
     }
-
-    const newCode = generateCode();
-    sessions.delete(oldCode);
-
-    const newSession = {
-      code: newCode,
-      rounds: session.rounds,
-      currentRound: -1,
-      phase: 'setup',
-      players: {},
-      timer: null,
-      timerInterval: null,
-      totalScores: {}
-    };
-    sessions.set(newCode, newSession);
-    currentSessionCode = newCode;
-
-    socket.leave(`host:${oldCode}`);
-    socket.join(`host:${newCode}`);
-
-    io.to(`player:${oldCode}`).emit('session-reset');
-
-    const baseUrl = PUBLIC_URL || getLocalURL();
-    const qrUrl = `${baseUrl}/join.html?code=${newCode}`;
-    const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: 'transparent' } });
-
-    callback({ code: newCode, qrSvg, qrUrl });
   });
 
   socket.on('join-session', ({ code, name }, callback) => {
