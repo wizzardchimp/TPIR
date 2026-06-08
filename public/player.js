@@ -1,4 +1,4 @@
-const socket = io({ transports: ['websocket', 'polling'] });
+const socket = io({ transports: ['polling', 'websocket'] });
 
 const params = new URLSearchParams(window.location.search);
 const sessionCode = params.get('code') || localStorage.getItem('tpir_session_code');
