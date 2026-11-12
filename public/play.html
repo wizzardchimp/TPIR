@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Join the show</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/show.css">
+</head>
+<body class="handset">
+  <div id="offline" class="banner hidden">Reconnecting…</div>
+  <main class="handset-wrap">
+    <p class="handset-kicker" id="kicker">WMROCU's Price is Right</p>
+    <section id="gate">
+      <h1>Your name</h1>
+      <form id="join-form">
+        <label>Name
+          <input id="name" maxlength="20" autocomplete="nickname" required>
+        </label>
+        <p id="join-err" class="err"></p>
+        <button class="primary" type="submit">Join</button>
+      </form>
+    </section>
+    <section id="play" class="hidden">
+      <p class="source" id="round-label"></p>
+      <h1 id="title">Watch the screen</h1>
+      <ul id="points" class="points"></ul>
+      <p class="source" id="source"></p>
+      <div class="handset-hex hidden" id="hex"><img id="photo" alt=""></div>
+      <div id="badge" class="badge hidden">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <path fill="#ea8736" d="M100.00 4.00 Q115.22 23.50 136.74 11.31 Q143.33 35.15 167.88 32.12 Q164.85 56.67 188.69 63.26 Q176.50 84.78 196.00 100.00 Q176.50 115.22 188.69 136.74 Q164.85 143.33 167.88 167.88 Q143.33 164.85 136.74 188.69 Q115.22 176.50 100.00 196.00 Q84.78 176.50 63.26 188.69 Q56.67 164.85 32.12 167.88 Q35.15 143.33 11.31 136.74 Q23.50 115.22 4.00 100.00 Q23.50 84.78 11.31 63.26 Q35.15 56.67 32.12 32.12 Q56.67 35.15 63.26 11.31 Q84.78 23.50 100.00 4.00 Z"/>
+        </svg>
+        <span id="badge-price"></span>
+      </div>
+      <p id="clock" class="clock hidden"></p>
+      <form id="guess-form">
+        <div class="money">
+          <input id="guess" inputmode="numeric" placeholder="enter value here" aria-label="Your price" autocomplete="off">
+        </div>
+        <p class="hint" id="preview"></p>
+        <button class="primary" type="submit" id="send">Lock in</button>
+      </form>
+      <div id="status" class="status hidden"></div>
+      <div id="board"></div>
+    </section>
+  </main>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/money.js"></script>
+  <script src="/js/play.js"></script>
+</body>
+</html>

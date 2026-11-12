@@ -1,187 +1,192 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TPIR Scores - Host Dashboard</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WMROCU's Price is Right</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/show.css">
 </head>
-<body>
-  <div class="container">
-    <h1 class="title">🏆 Price Is Right</h1>
-    <p class="subtitle">Scoreboard Dashboard</p>
-
-    <!-- LOGIN SCREEN -->
-    <div id="loginScreen" class="screen active">
-      <div class="card" style="max-width:420px; margin:0 auto">
-        <h2 class="card-title">Host Login</h2>
-        <form id="loginForm">
-          <div class="form-group">
-            <label for="hostPassword">Host password</label>
-            <input type="password" id="hostPassword" autocomplete="current-password" placeholder="Enter host password">
-          </div>
-          <button type="submit" class="btn btn-primary" style="width:100%">Log in</button>
-          <div id="loginError" class="join-error"></div>
-        </form>
-      </div>
+<body class="stage">
+  <form id="curtain" class="curtain">
+    <div class="curtain-inner">
+      <label class="host-label">Host name
+        <input id="host-name" maxlength="20" autocomplete="name">
+      </label>
+      <button type="submit" id="present" class="present-btn" aria-label="Start presentation"><span></span></button>
+      <p>Start presentation</p>
+      <label class="curtain-vol">Vol
+        <input id="curtain-volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
+      </label>
     </div>
+  </form>
+  <div id="sound-hint" class="sound-hint hidden">Tap for sound</div>
 
-    <!-- SETUP SCREEN -->
-    <div id="setupScreen" class="screen">
-      <div class="card">
-        <div class="session-header">
-          <h2 class="card-title" style="margin:0">Game Rounds</h2>
-          <span class="cloud-status" id="cloudStatus">☁ Loading…</span>
-        </div>
-        <p class="muted-text">
-          Rounds are stored in the cloud - edits are shared by every host instantly.
-          Tick the rounds to play, then press Create Session.
-        </p>
-        <table id="roundsTable">
-          <thead>
-            <tr>
-              <th style="width:60px">Play</th>
-              <th>Item</th>
-              <th style="width:130px">Price (£)</th>
-              <th style="width:100px">Secs</th>
-              <th style="width:130px">Edit</th>
-            </tr>
-          </thead>
-          <tbody id="roundsBody"></tbody>
-        </table>
-        <div class="editor-actions">
-          <button class="btn btn-secondary btn-sm" id="addRoundBtn">+ Add round</button>
-          <button class="btn btn-secondary btn-sm hidden" id="saveRoundsBtn">☁ Save to cloud</button>
-          <button class="btn btn-secondary btn-sm hidden" id="discardRoundsBtn">Discard changes</button>
-        </div>
-        <div class="text-center mt-20">
-          <button class="btn btn-primary" id="createSessionBtn">Create Session</button>
-        </div>
-      </div>
+  <div class="stage-fit">
+  <section id="screen-title" class="screen stage-screen active">
+    <div class="floor"></div>
+    <div class="spot" aria-hidden="true"></div>
+    <div class="bulbs top" aria-hidden="true"></div>
+    <div class="bulbs bottom" aria-hidden="true"></div>
+    <div class="bulbs side left" aria-hidden="true"></div>
+    <div class="bulbs side right" aria-hidden="true"></div>
+    <div class="neon-bars" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
+    <svg class="side-chev left" viewBox="0 0 160 240" aria-hidden="true">
+      <defs>
+        <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ffb15a"/>
+          <stop offset="45%" stop-color="#ff4d8d"/>
+          <stop offset="100%" stop-color="#7a5cff"/>
+        </linearGradient>
+      </defs>
+      <polyline points="132,18 36,120 132,222" fill="none" stroke="url(#cg)" stroke-width="26" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="86,18 0,120 86,222" fill="none" stroke="url(#cg)" stroke-width="26" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
+    </svg>
+    <svg class="side-chev right" viewBox="0 0 160 240" aria-hidden="true">
+      <polyline points="132,18 36,120 132,222" fill="none" stroke="url(#cg)" stroke-width="26" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="86,18 0,120 86,222" fill="none" stroke="url(#cg)" stroke-width="26" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
+    </svg>
+
+    <div class="sparkles" id="sparkles" aria-hidden="true"></div>
+    <div class="stars" aria-hidden="true">
+      <i style="left:16%;top:38%"></i>
+      <i style="left:74%;top:62%"></i>
+      <i style="left:82%;top:28%"></i>
+      <i style="left:22%;top:72%"></i>
+      <i style="left:88%;top:78%"></i>
     </div>
-
-    <!-- LOBBY SCREEN -->
-    <div id="lobbyScreen" class="screen">
-      <div class="card">
-        <div class="session-header">
-          <div class="session-code-box">
-            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
-            <span class="session-code" id="lobbySessionCode">---</span>
-            <button class="btn btn-danger btn-sm" id="resetSessionBtn">Reset</button>
-          </div>
-          <span id="phaseIndicator" style="color:#d4a843; font-weight:600; font-size:0.9rem; text-transform:uppercase">Lobby</span>
-        </div>
-        <div class="qr-section" id="qrSection">
-          <div id="qrCode"></div>
-          <span class="qr-url" id="qrUrl"></span>
-        </div>
+    <div class="hero">
+      <div class="diamond-wrap">
+        <div class="diamond"></div>
+        <div class="diamond-label" id="show-sub">PRICE<br>IS<br>RIGHT</div>
       </div>
-
-      <div class="card">
-        <h2 class="card-title">Players</h2>
-        <div class="player-count" id="playerCount">No players yet</div>
-        <div id="playerList"></div>
-      </div>
-
-      <div class="text-center">
-        <button class="btn btn-primary" id="startGameBtn">Start Game</button>
-      </div>
+      <h1 class="hero-name" id="show-name">WMROCU'S</h1>
+      <button type="button" id="start" class="play-btn hidden" aria-label="Start"><span></span></button>
     </div>
+    <p class="tagline" id="tagline"></p>
+  </section>
 
-    <!-- GAME SCREEN -->
-    <div id="gameScreen" class="screen">
-      <div class="card">
-        <div class="session-header">
-          <div class="session-code-box">
-            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
-            <span class="session-code" id="gameSessionCode" style="font-size:1.5rem">---</span>
-          </div>
-          <span id="gameRoundIndicator" style="color:#d4a843; font-weight:600; font-size:0.9rem">Round 1 of 5</span>
-        </div>
-      </div>
-
-      <div class="card text-center">
-        <div class="round-item-name" id="gameItemName">Item Name</div>
-        <div class="timer-display" id="gameTimer">0:45</div>
-        <div class="submission-count" id="submissionCount">Submitted: <span>0</span> / <span>0</span></div>
-        <div class="chips" id="submitters"></div>
-      </div>
-
-      <div class="text-center mt-20">
-        <button class="btn btn-primary" id="startRoundBtn">Start Round</button>
-        <button class="btn btn-primary hidden" id="showResultsBtn">Show Results</button>
-      </div>
+  <section id="screen-round" class="screen stage-screen">
+    <div class="stripe"></div>
+    <div class="round-grid"></div>
+    <svg class="mark" viewBox="0 0 70 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="mg" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffb15a"/>
+          <stop offset="50%" stop-color="#ff4d8d"/>
+          <stop offset="100%" stop-color="#7a5cff"/>
+        </linearGradient>
+      </defs>
+      <polyline points="46,4 18,24 46,44" fill="none" stroke="url(#mg)" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="30,4 2,24 30,44" fill="none" stroke="url(#mg)" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="copy">
+      <h1 id="item-title"></h1>
+      <ul id="item-points" class="points"></ul>
+      <p id="item-source"></p>
     </div>
+    <div class="hex empty" id="hex"><img id="item-img" alt=""></div>
+    <div id="guess-list" class="guess-list hidden"></div>
+  </section>
 
-    <!-- RESULTS SCREEN -->
-    <div id="resultsScreen" class="screen">
-      <div class="card">
-        <div class="session-header">
-          <div class="session-code-box">
-            <span style="color:rgba(255,255,255,0.5); font-size:0.9rem">Session</span>
-            <span class="session-code" id="resultsSessionCode" style="font-size:1.5rem">---</span>
-          </div>
-          <span id="resultsRoundLabel" style="color:#d4a843; font-weight:600; font-size:0.9rem">Round 1 Results</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title" id="resultsTitle">Results</h2>
-        <p style="color:rgba(255,255,255,0.5); margin-bottom:16px; font-size:0.9rem">
-          Actual price: <span id="actualPrice" style="color:#f5d76e; font-weight:700"></span>
-        </p>
-        <table class="results-table" id="resultsTable">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Guess</th>
-              <th>Diff</th>
-              <th>Points</th>
-            </tr>
-          </thead>
-          <tbody id="resultsBody"></tbody>
-        </table>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">Running Scores</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th style="text-align:center">Total</th>
-            </tr>
-          </thead>
-          <tbody id="scoreTotalsBody"></tbody>
-        </table>
-      </div>
-
-      <div class="text-center mt-20">
-        <button class="btn btn-primary" id="nextRoundBtn">Next Round</button>
-        <button class="btn btn-primary hidden" id="finalResultsBtn">View Final Results</button>
-      </div>
+  <section id="screen-podium" class="screen">
+    <canvas id="podium-fx" aria-hidden="true"></canvas>
+    <div class="sparkles" id="podium-sparkles" aria-hidden="true"></div>
+    <div class="podium-head">
+      <p class="kicker">Final board</p>
+      <h2>Highest score wins</h2>
     </div>
+    <div class="grid-wrap" id="grid-wrap"></div>
+  </section>
 
-    <!-- FINAL SCREEN -->
-    <div id="finalScreen" class="screen">
-      <div class="card text-center" style="border-color:#d4a843; background:rgba(212,168,67,0.05)">
-        <h2 style="font-size:2rem; color:#f5d76e; margin-bottom:8px">🏆 Final Standings 🏆</h2>
-        <p style="color:rgba(255,255,255,0.5)">All rounds complete!</p>
-      </div>
+  </div>
+  <div id="timer-bar" class="timer-bar hidden" aria-hidden="true"><span id="timer-fill"></span></div>
+  <div id="toolbar" class="toolbar hidden">
+    <button type="button" id="qr-icon" class="tool-qr" aria-label="Show lobby">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm10 0h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v4h-2v-4z"/></svg>
+      <span id="qr-badge" class="hidden">0</span>
+    </button>
+    <button type="button" id="dock-lock">Lock</button>
+    <button type="button" id="dock-reveal">Reveal</button>
+    <button type="button" id="dock-next">Next</button>
+    <button type="button" id="score-btn">Guesses</button>
+    <button type="button" id="host-btn">Host</button>
+    <button type="button" id="refresh-btn">Refresh</button>
+    <label class="vol">Vol
+      <input id="volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
+    </label>
+    <span id="session-code" class="session-id">----</span>
+  </div>
 
-      <div class="card">
-        <ul class="standings-list" id="finalStandings"></ul>
+  <div id="qr-full" class="qr-full hidden">
+    <button type="button" class="qr-shot" id="qr-shot" aria-label="Hide QR code">
+      <img id="qr" src="/qr.svg" alt="">
+    </button>
+    <p id="join-url"></p>
+  </div>
+  <div id="lobby-pop" class="overlay hidden">
+    <div class="sheet lobby-sheet">
+      <p class="kicker">Lobby</p>
+      <h3 id="join-count">Waiting</h3>
+      <div class="lobby-body">
+        <button type="button" class="qr-shot" id="lobby-qr-btn" aria-label="Hide QR code">
+          <img id="lobby-qr" src="/qr.svg" alt="">
+        </button>
+        <div id="lobby-players"></div>
       </div>
-
-      <div class="text-center mt-20">
-        <button class="btn btn-primary" id="newGameBtn">New Game</button>
-      </div>
+      <button type="button" id="lobby-start" class="lobby-start">Start round 1</button>
+    </div>
+  </div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div id="price-scrim" class="price-scrim hidden"></div>
+  <div id="badge" class="badge hidden">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <path fill="#ea8736" d="M100.00 4.00 Q115.22 23.50 136.74 11.31 Q143.33 35.15 167.88 32.12 Q164.85 56.67 188.69 63.26 Q176.50 84.78 196.00 100.00 Q176.50 115.22 188.69 136.74 Q164.85 143.33 167.88 167.88 Q143.33 164.85 136.74 188.69 Q115.22 176.50 100.00 196.00 Q84.78 176.50 63.26 188.69 Q56.67 164.85 32.12 167.88 Q35.15 143.33 11.31 136.74 Q23.50 115.22 4.00 100.00 Q23.50 84.78 11.31 63.26 Q35.15 56.67 32.12 32.12 Q56.67 35.15 63.26 11.31 Q84.78 23.50 100.00 4.00 Z"/>
+    </svg>
+    <span id="badge-price"></span>
+    <span id="badge-winner" class="badge-winner"></span>
+  </div>
+  <div id="time-up" class="overlay result-pop hidden">
+    <div class="sheet time-up-sheet">
+      <h2>Time Up!</h2>
+      <button type="button" id="time-up-min" class="lobby-start">Show guesses</button>
+    </div>
+  </div>
+  <div id="round-result" class="overlay result-pop hidden">
+    <div class="sheet result-sheet" id="result-sheet"></div>
+  </div>
+  <div id="score-pop" class="overlay hidden">
+    <div class="sheet" id="score-sheet"></div>
+  </div>
+  <div id="host-pop" class="overlay hidden">
+    <div class="sheet host-sheet" id="host-sheet"></div>
+  </div>
+  <div id="pin-pop" class="overlay hidden">
+    <form class="sheet pin-sheet" id="pin-form">
+      <h3>Host PIN</h3>
+      <p class="sub">Unlock the show controls.</p>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="Host PIN">
+      <p id="pin-err" class="err"></p>
+      <button type="submit">Unlock</button>
+    </form>
+  </div>
+  <div id="rules-pop" class="overlay hidden">
+    <div class="sheet rules-sheet">
+      <p class="kicker">Rules</p>
+      <h2>How to play</h2>
+      <ol class="rules-list">
+        <li>Bid the price &mdash; <strong>do not go over</strong>.</li>
+        <li>Closest without going over wins <strong>3 points</strong>.</li>
+        <li>Second closest gets <strong>2 points</strong>; every other valid bid gets <strong>1 point</strong>.</li>
+      </ol>
+      <button type="button" id="rules-continue" class="lobby-start">Start game</button>
     </div>
   </div>
 
-  <div id="toast" class="toast"></div>
-
   <script src="/socket.io/socket.io.js"></script>
-  <script src="host.js"></script>
+  <script src="/js/money.js"></script>
+  <script src="/js/display.js"></script>
 </body>
 </html>

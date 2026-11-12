@@ -1,636 +1,711 @@
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+const multer = require('multer');
 const QRCode = require('qrcode');
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
+const { Server } = require('socket.io');
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', credentials: true },
-  transports: ['polling', 'websocket'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  cookie: false
-});
+const ROOT = __dirname;
+const PUBLIC = path.join(ROOT, 'public');
+const PORT = Number(process.env.PORT) || 3000;
+const PIN = process.env.HOST_PIN || '1234';
+const AUDIO = new Set(['intro.mp3', 'r1.mp3', 'end.mp3', 'dingding.mp3', 'reveal.mp3', 'scores.mp3']);
+const BEDS = ['r1.mp3'];
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled rejection:', reason);
-});
-
-const PORT = process.env.PORT || 3000;
-const PUBLIC_URL = process.env.PUBLIC_URL || '';
-
-const store = require('./store');
-const crypto = require('crypto');
-
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-if (!ADMIN_TOKEN) {
-  console.warn('WARNING: ADMIN_TOKEN is not set - anyone can host games and edit rounds. Set it in Railway variables.');
+function dataDir() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  return path.join(ROOT, 'data');
 }
 
-function tokenOk(token) {
-  if (!ADMIN_TOKEN) return true;
-  const a = Buffer.from(String(token || ''));
-  const b = Buffer.from(ADMIN_TOKEN);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+const DATA = dataDir();
+const UPLOADS = path.join(DATA, 'uploads');
+const SETTINGS_FILE = path.join(DATA, 'settings.json');
+const LIVE_FILE = path.join(DATA, 'live.json');
+fs.mkdirSync(UPLOADS, { recursive: true });
 
-function requireAdmin(req, res, next) {
-  if (tokenOk(req.get('x-admin-token'))) return next();
-  res.status(401).json({ error: 'Invalid host password' });
-}
-
-app.use(express.json({ limit: '200kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/health', (req, res) => res.send('ok'));
-
-// Host auth check (host page uses this to show the password prompt)
-app.post('/api/auth', requireAdmin, (req, res) => res.json({ ok: true, open: !ADMIN_TOKEN }));
-
-// Rounds live in cloud storage. Prices are only served to authenticated hosts.
-app.get('/api/rounds', requireAdmin, (req, res) => res.json(store.getAll()));
-app.put('/api/rounds', requireAdmin, async (req, res) => {
+function readJson(file) {
   try {
-    const rounds = await store.setAll(req.body);
-    io.to('hosts').emit('rounds-updated', rounds);
-    res.json(rounds);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
   }
-});
-
-const sessions = new Map();
-
-function getLocalURL() {
-  if (PUBLIC_URL) return PUBLIC_URL;
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return `http://${iface.address}:${PORT}`;
-      }
-    }
-  }
-  return `http://localhost:${PORT}`;
 }
 
-function generateCode() {
-  let code;
-  do {
-    code = String(Math.floor(1000 + Math.random() * 9000));
-  } while (sessions.has(code));
+function writeJson(file, data) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+function loadSettings() {
+  const saved = readJson(SETTINGS_FILE);
+  const base = saved || readJson(path.join(ROOT, 'data', 'default.json'));
+  return {
+    showTitle: String(base.showTitle || "WMROCU'S"),
+    showSubtitle: String(base.showSubtitle || 'PRICE IS RIGHT'),
+    tagline: String(base.tagline || ''),
+    contentPack: Number(base.contentPack) || 0,
+    rounds: Array.isArray(base.rounds) ? base.rounds.map(cleanRound) : [],
+  };
+}
+
+function cleanRound(raw, index) {
+  const price = Number(raw.pricePence);
+  return {
+    id: safeId(raw.id) || crypto.randomUUID(),
+    title: String(raw.title || 'Item').slice(0, 160),
+    short: String(raw.short || '').slice(0, 24),
+    source: String(raw.source || '').slice(0, 80),
+    points: Array.isArray(raw.points) ? raw.points.map((item) => String(item).slice(0, 80)).filter(Boolean).slice(0, 8) : [],
+    pricePence: Number.isFinite(price) ? Math.max(0, Math.round(price)) : 0,
+    image: safeImage(raw.image),
+    audio: raw.audio === '' ? '' : AUDIO.has(raw.audio) ? raw.audio : (BEDS[index] || ''),
+  };
+}
+
+function safeId(id) {
+  if (typeof id === 'string' && /^[a-zA-Z0-9-]{4,80}$/.test(id)) return id;
+  return '';
+}
+
+function safeImage(url) {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('/uploads/') || url.startsWith('/seed/') || url.startsWith('/rounds/')) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:') return url;
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function audioFile() {
+  return fs.existsSync(path.join(ROOT, 'r1.mp3')) ? '/audio/r1.mp3' : '';
+}
+
+let settings = loadSettings();
+let phase = 'title';
+let roundIndex = 0;
+let bidsIn = false;
+let roundEndsAt = 0;
+let roundTimedOut = false;
+let roundTimer = null;
+let players = [];
+let sessionCode = '';
+let sessionStartedAt = Date.now();
+let cueSeq = 0;
+let cue = { seq: 0, name: '' };
+const hosts = new Set();
+
+function makeCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i += 1) code += alphabet[crypto.randomInt(alphabet.length)];
   return code;
 }
 
-function getPlayerList(session) {
-  return Object.values(session.players)
-    .filter(p => !p.kicked)
-    .map(p => ({
-      name: p.name,
-      connected: p.connected,
-      joinedAt: p.joinedAt,
-      guessed: session.phase === 'playing' && p.guesses[session.currentRound] !== undefined
-    }));
-}
-
-function emitGuessCount(session) {
-  const active = Object.values(session.players).filter(p => !p.kicked);
-  const submitted = active.filter(p => p.guesses[session.currentRound] !== undefined).length;
-  io.to(`host:${session.code}`).emit('guess-count', {
-    submitted,
-    total: active.length,
-    players: getPlayerList(session)
-  });
-}
-
-// Drop abandoned sessions after 12h of inactivity
-setInterval(() => {
-  const cutoff = Date.now() - 12 * 60 * 60 * 1000;
-  for (const [code, s] of sessions) {
-    if (s.lastActivity < cutoff) {
-      if (s.timerInterval) clearInterval(s.timerInterval);
-      sessions.delete(code);
-    }
+function loadLive() {
+  const live = readJson(LIVE_FILE);
+  if (!live) return;
+  if (['title', 'guessing', 'revealed', 'podium'].includes(live.phase)) phase = live.phase;
+  roundIndex = Number.isInteger(live.roundIndex) ? live.roundIndex : 0;
+  bidsIn = Boolean(live.bidsIn);
+  roundEndsAt = Number(live.roundEndsAt) || 0;
+  roundTimedOut = Boolean(live.roundTimedOut);
+  if (typeof live.sessionCode === 'string' && live.sessionCode) sessionCode = live.sessionCode;
+  sessionStartedAt = Number(live.sessionStartedAt) || Date.now();
+  if (Array.isArray(live.players)) {
+    players = live.players.map((p) => ({
+      id: safeId(p.id) || crypto.randomUUID(),
+      token: typeof p.token === 'string' ? p.token.slice(0, 80) : crypto.randomUUID(),
+      name: cleanName(p.name),
+      guesses: p.guesses && typeof p.guesses === 'object' ? p.guesses : {},
+      sockets: new Set(),
+    })).filter((p) => p.name);
   }
-}, 30 * 60 * 1000).unref();
+  if (roundIndex >= settings.rounds.length) roundIndex = 0;
+}
 
-function calculateRoundResults(session, roundIndex) {
-  const round = session.rounds[roundIndex];
-  if (!round) return { rankings: [], points: {} };
+function persistSettings() {
+  try {
+    writeJson(SETTINGS_FILE, settings);
+  } catch (err) {
+    console.error('Could not save settings:', err.message);
+  }
+}
 
-  const price = round.price;
-  const players = Object.values(session.players).filter(p => !p.kicked);
+if (/neil/i.test(settings.showTitle) || /Neil/.test(settings.tagline)) {
+  if (/neil/i.test(settings.showTitle)) settings.showTitle = "WMROCU'S";
+  settings.tagline = settings.tagline.replace(/Neil/g, 'host');
+  persistSettings();
+}
+if ((settings.contentPack || 0) < 2) {
+  const fresh = readJson(path.join(ROOT, 'data', 'default.json'));
+  if (fresh && Array.isArray(fresh.rounds)) {
+    settings.rounds = fresh.rounds.map(cleanRound);
+    settings.contentPack = 2;
+    persistSettings();
+  }
+}
 
-  const entries = [];
-  for (const p of players) {
-    const guess = p.guesses[roundIndex];
-    if (guess !== undefined) {
-      entries.push({
+function persistLive() {
+  try {
+    writeJson(LIVE_FILE, {
+      phase,
+      roundIndex,
+      bidsIn,
+      roundEndsAt,
+      roundTimedOut,
+      sessionCode,
+      sessionStartedAt,
+      players: players.map((p) => ({
+        id: p.id,
+        token: p.token,
         name: p.name,
-        guess: guess.value,
-        submittedAt: guess.submittedAt,
-        diff: parseFloat((price - guess.value).toFixed(2))
-      });
-    }
-  }
-
-  if (entries.length === 0) return { rankings: [], points: {} };
-
-  const allOver = entries.every(e => e.diff < 0);
-
-  if (allOver) {
-    entries.sort((a, b) => a.submittedAt - b.submittedAt);
-    const points = {};
-    points[entries[0].name] = 1;
-    return {
-      rankings: entries.map(e => ({
-        ...e,
-        rank: points[e.name] ? 1 : null,
-        points: points[e.name] || 0
+        guesses: p.guesses,
       })),
-      points
-    };
+    });
+  } catch (err) {
+    console.error('Could not save live state:', err.message);
   }
-
-  const valid = entries.filter(e => e.diff >= 0);
-  valid.sort((a, b) => {
-    if (a.diff !== b.diff) return a.diff - b.diff;
-    return a.submittedAt - b.submittedAt;
-  });
-
-  const pointValues = [5, 3, 2, 1];
-  const points = {};
-
-  const rankings = entries.map(e => {
-    if (e.diff < 0) {
-      return { ...e, rank: null, points: 0 };
-    }
-    const rankIndex = valid.findIndex(v => v.name === e.name);
-    const rank = rankIndex + 1;
-    const pts = rankIndex < 4 ? pointValues[rankIndex] : 0;
-    if (pts > 0) points[e.name] = pts;
-    return { ...e, rank, points: pts };
-  });
-
-  rankings.sort((a, b) => {
-    if (a.diff >= 0 && b.diff < 0) return -1;
-    if (a.diff < 0 && b.diff >= 0) return 1;
-    if (a.diff >= 0 && b.diff >= 0) return a.rank - b.rank;
-    if (a.diff < 0 && b.diff < 0) return a.submittedAt - b.submittedAt;
-    return 0;
-  });
-
-  return { rankings, points };
 }
 
-io.engine.on('connection_error', (err) => {
-  console.error('Socket.io engine error:', err.code, err.message, err.context);
+loadLive();
+if (!sessionCode || Date.now() - sessionStartedAt >= 60 * 60 * 1000) {
+  sessionCode = makeCode();
+  sessionStartedAt = Date.now();
+  phase = 'title';
+  roundIndex = 0;
+  bidsIn = false;
+  roundEndsAt = 0;
+  players = [];
+  persistLive();
+}
+
+function cleanName(name) {
+  return String(name || '').replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
+function pinOk(pin) {
+  const got = Buffer.from(String(pin || ''));
+  const want = Buffer.from(PIN);
+  if (got.length !== want.length) return false;
+  return crypto.timingSafeEqual(got, want);
+}
+
+function revealedThrough() {
+  if (phase === 'title') return 0;
+  if (phase === 'podium') return settings.rounds.length;
+  if (phase === 'revealed') return roundIndex + 1;
+  return roundIndex;
+}
+
+function pushCue(name) {
+  cueSeq += 1;
+  cue = { seq: cueSeq, name };
+}
+
+function awardsFor(round) {
+  const price = round.pricePence;
+  const played = [];
+  players.forEach((p) => {
+    const guess = p.guesses[round.id];
+    if (guess == null) return;
+    played.push({ id: p.id, guess: Number(guess), offset: Math.abs(Number(guess) - price) });
+  });
+  const eligible = played
+    .filter((item) => item.guess <= price)
+    .sort((a, b) => a.offset - b.offset);
+  const map = {};
+  players.forEach((p) => {
+    map[p.id] = p.guesses[round.id] == null ? null : 0;
+  });
+  if (!eligible.length) return map;
+  const first = eligible[0].offset;
+  const next = eligible.find((item) => item.offset !== first);
+  const second = next ? next.offset : null;
+  eligible.forEach((item) => {
+    if (item.offset === first) map[item.id] = 3;
+    else if (second != null && item.offset === second) map[item.id] = 2;
+    else map[item.id] = 1;
+  });
+  return map;
+}
+
+function scoresFor(player, count) {
+  const list = [];
+  for (let i = 0; i < settings.rounds.length; i += 1) {
+    if (i >= count) {
+      list.push(null);
+      continue;
+    }
+    list.push(awardsFor(settings.rounds[i])[player.id]);
+  }
+  return list;
+}
+
+function hostLabel() {
+  const title = String(settings.showTitle || '').trim();
+  return title || "the host's";
+}
+
+function fillTitle(text) {
+  return String(text || '').replaceAll('{host}', hostLabel());
+}
+
+function publicState() {
+  const n = revealedThrough();
+  const round = settings.rounds[roundIndex] || null;
+  const showCurrentPrice = phase === 'revealed' || phase === 'podium';
+  const visibleUntil = phase === 'podium'
+    ? settings.rounds.length
+    : phase === 'title'
+      ? 0
+      : roundIndex + 1;
+  return {
+    phase,
+    roundIndex,
+    roundCount: settings.rounds.length,
+    bidsIn,
+    roundEndsAt: phase === 'guessing' && !bidsIn ? roundEndsAt : 0,
+    timedOut: phase === 'guessing' && bidsIn && roundTimedOut,
+    roundMs: 60000,
+    sessionCode,
+    cue,
+    showTitle: settings.showTitle,
+    showSubtitle: settings.showSubtitle,
+    tagline: settings.tagline,
+    startAudio: audioFile(),
+    nextAudio: phase === 'revealed' && settings.rounds[roundIndex + 1] ? audioFile() : '',
+    revealedCount: n,
+    round: round && visibleUntil > 0 ? {
+      id: round.id,
+      title: fillTitle(round.title),
+      short: round.short,
+      source: round.source,
+      points: round.points || [],
+      image: round.image,
+      audio: audioFile(),
+      pricePence: showCurrentPrice ? round.pricePence : undefined,
+    } : null,
+    rounds: settings.rounds.slice(0, visibleUntil).map((item, i) => ({
+      id: item.id,
+      title: fillTitle(item.title),
+      short: item.short || fillTitle(item.title),
+      pricePence: i < n ? item.pricePence : undefined,
+    })),
+    players: players.map((p) => {
+      const scores = scoresFor(p, n);
+      const playedScores = scores.filter((x) => x != null);
+      const currentGuess = round ? p.guesses[round.id] : null;
+      return {
+        id: p.id,
+        name: p.name,
+        connected: p.sockets.size > 0,
+        submitted: Boolean(round) && currentGuess != null && (phase === 'guessing' || phase === 'revealed'),
+        scores,
+        total: playedScores.reduce((sum, x) => sum + x, 0),
+        played: playedScores.length,
+        guessPence: currentGuess != null ? Number(currentGuess) : null,
+      };
+    }),
+  };
+}
+
+function youView(player) {
+  const round = settings.rounds[roundIndex] || null;
+  const guess = round ? player.guesses[round.id] : null;
+  const n = revealedThrough();
+  const scores = scoresFor(player, n);
+  const played = scores.filter((x) => x != null);
+  return {
+    id: player.id,
+    name: player.name,
+    guessPence: guess == null ? null : Number(guess),
+    submitted: guess != null,
+    locked: bidsIn || phase !== 'guessing',
+    roundPoints: phase === 'revealed' ? scores[roundIndex] : null,
+    total: played.reduce((sum, x) => sum + x, 0),
+    played: played.length,
+  };
+}
+
+function broadcast() {
+  io.emit('state', publicState());
+  for (const player of players) {
+    for (const sid of player.sockets) {
+      io.to(sid).emit('you', youView(player));
+    }
+  }
+}
+
+function playerBySocket(socket) {
+  return players.find((p) => p.sockets.has(socket.id));
+}
+
+function checkAllIn() {
+  if (phase !== 'guessing' || bidsIn) return;
+  if (!players.length) return;
+  const round = settings.rounds[roundIndex];
+  if (!round) return;
+  if (players.every((p) => p.guesses[round.id] != null)) {
+    bidsIn = true;
+    pushCue('ding');
+  }
+}
+
+function hostSettings() {
+  return {
+    showTitle: settings.showTitle,
+    showSubtitle: settings.showSubtitle,
+    tagline: settings.tagline,
+    beds: BEDS.filter((name) => fs.existsSync(path.join(ROOT, name))),
+    rounds: settings.rounds.map((round, i) => ({
+      id: round.id,
+      title: round.title,
+      short: round.short,
+      source: round.source,
+      points: round.points || [],
+      pricePence: round.pricePence,
+      image: round.image,
+      audio: round.audio || `r${i + 1}.mp3`,
+    })),
+  };
+}
+
+function applySettings(payload) {
+  const rounds = Array.isArray(payload.rounds) ? payload.rounds.map(cleanRound) : [];
+  if (!rounds.length) return 'Add at least one round';
+  const ids = new Set();
+  for (const round of rounds) {
+    if (ids.has(round.id)) round.id = crypto.randomUUID();
+    ids.add(round.id);
+    if (!round.title.trim()) return 'Every round needs a name';
+    if (round.pricePence > 10000000000) return 'Price is too large';
+  }
+  settings = {
+    showTitle: String(payload.showTitle || "WMROCU'S").slice(0, 32),
+    showSubtitle: String(payload.showSubtitle || 'PRICE IS RIGHT').slice(0, 32),
+    tagline: String(payload.tagline || '').slice(0, 140),
+    contentPack: 2,
+    rounds,
+  };
+  if (roundIndex >= settings.rounds.length) {
+    roundIndex = 0;
+    phase = 'title';
+    bidsIn = false;
+  }
+  persistSettings();
+  return '';
+}
+
+function lanIP() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return '';
+}
+
+function playUrl(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '') + '/play?code=' + sessionCode;
+  const host = req.get('host') || `localhost:${PORT}`;
+  if (/^(localhost|127\.0\.0\.1)(:|$)/.test(host)) {
+    const ip = lanIP();
+    if (ip) {
+      const port = host.includes(':') ? host.split(':').pop() : String(PORT);
+      return `http://${ip}:${port}/play?code=${sessionCode}`;
+    }
+  }
+  return `${req.protocol}://${host}/play?code=${sessionCode}`;
+}
+
+const app = express();
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '1mb' }));
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) ? ext : '.jpg';
+      cb(null, crypto.randomUUID() + safeExt);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype));
+  },
 });
 
+app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/play', (req, res) => res.sendFile(path.join(PUBLIC, 'play.html')));
+
+app.get('/join.json', (req, res) => res.json({ url: playUrl(req) }));
+
+app.get('/qr.svg', async (req, res) => {
+  const svg = await QRCode.toString(playUrl(req), {
+    type: 'svg',
+    margin: 1,
+    color: { dark: '#1a0336', light: '#ffffff' },
+  });
+  res.type('image/svg+xml').send(svg);
+});
+
+app.get('/audio/:name', (req, res) => {
+  if (!AUDIO.has(req.params.name)) return res.status(404).end();
+  const file = path.join(ROOT, req.params.name);
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
+});
+
+app.use('/uploads', express.static(UPLOADS));
+app.use(express.static(PUBLIC));
+
+app.post('/api/upload', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: 'Could not take that image' });
+    if (!req.file) return res.status(400).json({ error: 'Use a JPG, PNG, or WebP' });
+    res.json({ url: '/uploads/' + req.file.filename });
+  });
+});
+
+const server = http.createServer(app);
+const io = new Server(server);
+
+function requireHost() {
+  return true;
+}
+
+function clearRoundTimer() {
+  if (roundTimer) clearTimeout(roundTimer);
+  roundTimer = null;
+}
+
+function expireRound() {
+  roundTimer = null;
+  if (phase !== 'guessing' || bidsIn) return;
+  bidsIn = true;
+  roundTimedOut = true;
+  pushCue('timeup');
+  broadcast();
+  persistLive();
+}
+
+function startRoundClock() {
+  clearRoundTimer();
+  roundTimedOut = false;
+  roundEndsAt = Date.now() + 60000;
+  roundTimer = setTimeout(expireRound, 60000);
+}
+
+function wipeSession(announce) {
+  clearRoundTimer();
+  roundEndsAt = 0;
+  phase = 'title';
+  roundIndex = 0;
+  bidsIn = false;
+  players = [];
+  sessionCode = makeCode();
+  sessionStartedAt = Date.now();
+  pushCue('wipe');
+  persistLive();
+  if (announce) broadcast();
+}
+
+function resumeRoundClock() {
+  clearRoundTimer();
+  if (phase !== 'guessing' || bidsIn) return;
+  const left = roundEndsAt - Date.now();
+  if (left <= 0) {
+    expireRound();
+    return;
+  }
+  roundTimer = setTimeout(expireRound, left);
+}
+
 io.on('connection', (socket) => {
-  console.log('Socket connected:', socket.id);
-  let hostCode = null;          // set only for the authenticated host socket
-  let currentSessionCode = null; // set only for player sockets
-  let currentPlayerName = null;
+  socket.emit('state', publicState());
 
-  async function makeQr(code) {
-    const baseUrl = PUBLIC_URL || getLocalURL();
-    const qrUrl = `${baseUrl}/join.html?code=${code}`;
-    const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
-    return { qrSvg, qrUrl };
-  }
-
-  function newSession(rounds) {
-    const code = generateCode();
-    return {
-      code,
-      hostKey: crypto.randomBytes(16).toString('hex'),
-      rounds,
-      currentRound: -1,
-      phase: 'setup',
-      players: {},
-      timer: null,
-      timerInterval: null,
-      totalScores: {},
-      lastActivity: Date.now()
-    };
-  }
-
-  // Hosts listen for live round-list changes from the cloud store
-  socket.on('host-subscribe', ({ token }) => {
-    if (tokenOk(token)) socket.join('hosts');
-  });
-
-  socket.on('create-session', async ({ token, roundIds }, callback) => {
-    try {
-      if (!tokenOk(token)) return callback({ error: 'Invalid host password' });
-      // Rounds always come from the cloud store, never from the client.
-      const all = store.getAll();
-      const rounds = Array.isArray(roundIds)
-        ? roundIds.map(id => all.find(r => r.id === id)).filter(Boolean).map(r => ({ ...r }))
-        : all.map(r => ({ ...r }));
-      if (rounds.length === 0) return callback({ error: 'Select at least one round' });
-
-      const session = newSession(rounds);
-      sessions.set(session.code, session);
-      hostCode = session.code;
-      socket.join(`host:${session.code}`);
-      socket.join('hosts');
-
-      callback({ code: session.code, hostKey: session.hostKey, ...(await makeQr(session.code)) });
-    } catch (err) {
-      console.error('create-session error:', err);
-      callback({ error: err.message });
+  socket.on('player:join', ({ token, name, code }) => {
+    const clean = cleanName(name);
+    if (!clean) return socket.emit('join:err', 'Enter a name');
+    if (String(code || '').toUpperCase() !== sessionCode) {
+      return socket.emit('join:err', 'Scan the code on the screen');
     }
-  });
-
-  // Host refreshed the page / lost connection: take the session back
-  socket.on('host-rejoin', async ({ code, hostKey }, callback) => {
-    const session = sessions.get(code);
-    if (!session || session.hostKey !== hostKey) return callback({ error: 'Session not found' });
-    hostCode = code;
-    socket.join(`host:${code}`);
-    socket.join('hosts');
-    session.lastActivity = Date.now();
-    const round = session.rounds[session.currentRound];
-    callback({
-      code,
-      ...(await makeQr(code)),
-      phase: session.phase,
-      players: getPlayerList(session),
-      totalRounds: session.rounds.length,
-      currentRound: session.currentRound,
-      roundName: round ? round.name : null,
-      roundPrice: round && session.phase === 'results' ? round.price : null,
-      remaining: session.timer ? Math.max(0, Math.ceil((session.timer.endAt - Date.now()) / 1000)) : null,
-      totalScores: session.totalScores
-    });
-  });
-
-  socket.on('start-game', () => {
-    if (!hostCode) return;
-    const session = sessions.get(hostCode);
-    if (!session || Object.keys(session.players).length === 0) return;
-
-    session.phase = 'lobby';
-    session.currentRound = 0;
-    const playerNames = Object.keys(session.players);
-    for (const name of playerNames) {
-      session.totalScores[name] = 0;
+    if (typeof token !== 'string' || token.length < 8 || token.length > 80) {
+      return socket.emit('join:err', 'Join again');
     }
-
-    io.to(`host:${hostCode}`).emit('game-started', {
-      players: getPlayerList(session),
-      totalRounds: session.rounds.length
-    });
-    io.to(`player:${hostCode}`).emit('game-started', {
-      totalRounds: session.rounds.length
-    });
-  });
-
-  socket.on('start-round', () => {
-    if (!hostCode) return;
-    const session = sessions.get(hostCode);
-    if (!session) return;
-
-    const roundIndex = session.currentRound;
-    const round = session.rounds[roundIndex];
-    if (!round) return;
-
-    session.phase = 'playing';
-    session.lastActivity = Date.now();
-
-    if (session.timerInterval) {
-      clearInterval(session.timerInterval);
-      session.timerInterval = null;
-    }
-
-    const seconds = round.seconds || 45;
-    const endAt = Date.now() + seconds * 1000;
-    session.timer = { endAt };
-
-    io.to(`host:${hostCode}`).emit('timer-started', {
-      roundIndex,
-      roundName: round.name,
-      roundPrice: round.price,
-      seconds,
-      roundNumber: roundIndex + 1,
-      totalRounds: session.rounds.length
-    });
-    io.to(`player:${hostCode}`).emit('timer-started', {
-      roundIndex,
-      roundName: round.name,
-      seconds,
-      roundNumber: roundIndex + 1,
-      totalRounds: session.rounds.length
-    });
-
-    emitGuessCount(session);
-
-    session.timerInterval = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((session.timer.endAt - Date.now()) / 1000));
-
-      io.to(`host:${hostCode}`).emit('timer-tick', { remaining });
-      io.to(`player:${hostCode}`).emit('timer-tick', { remaining });
-
-      if (remaining <= 0) {
-        clearInterval(session.timerInterval);
-        session.timerInterval = null;
-        io.to(`host:${hostCode}`).emit('time-up');
-        io.to(`player:${hostCode}`).emit('time-up');
-      }
-    }, 1000);
-  });
-
-  socket.on('show-results', () => {
-    if (!hostCode) return;
-    const session = sessions.get(hostCode);
-    if (!session) return;
-
-    if (session.timerInterval) {
-      clearInterval(session.timerInterval);
-      session.timerInterval = null;
-    }
-
-    const { rankings, points } = calculateRoundResults(session, session.currentRound);
-
-    for (const [name, pts] of Object.entries(points)) {
-      if (session.totalScores[name] !== undefined) {
-        session.totalScores[name] += pts;
-      }
-    }
-
-    session.phase = 'results';
-    const round = session.rounds[session.currentRound];
-
-    io.to(`host:${hostCode}`).emit('round-results', {
-      roundIndex: session.currentRound,
-      roundName: round.name,
-      roundPrice: round.price,
-      rankings,
-      totalScores: session.totalScores
-    });
-    io.to(`player:${hostCode}`).emit('round-results', {
-      roundIndex: session.currentRound,
-      roundName: round.name,
-      roundPrice: round.price,
-      rankings,
-      totalScores: session.totalScores
-    });
-  });
-
-  socket.on('next-round', () => {
-    if (!hostCode) return;
-    const session = sessions.get(hostCode);
-    if (!session) return;
-
-    session.currentRound++;
-
-    if (session.currentRound >= session.rounds.length) {
-      session.phase = 'finished';
-      io.to(`host:${hostCode}`).emit('game-finished', {
-        totalScores: session.totalScores
-      });
-      io.to(`player:${hostCode}`).emit('game-finished', {
-        totalScores: session.totalScores
-      });
+    let player = players.find((p) => p.token === token);
+    if (!player) {
+      if (players.length >= 40) return socket.emit('join:err', 'The show is full');
+      player = { id: crypto.randomUUID(), token, name: clean, guesses: {}, sockets: new Set() };
+      players.push(player);
     } else {
-      session.phase = 'lobby';
-      const round = session.rounds[session.currentRound];
-      io.to(`host:${hostCode}`).emit('round-ready', {
-        roundNumber: session.currentRound + 1,
-        roundName: round.name,
-        totalRounds: session.rounds.length
-      });
-      io.to(`player:${hostCode}`).emit('round-ready', {
-        roundNumber: session.currentRound + 1,
-        totalRounds: session.rounds.length
-      });
+      player.name = clean;
     }
+    player.sockets.add(socket.id);
+    socket.emit('joined', { name: player.name });
+    checkAllIn();
+    broadcast();
+    persistLive();
   });
 
-  socket.on('kick-player', ({ name }) => {
-    if (!hostCode) return;
-    const session = sessions.get(hostCode);
-    if (!session) return;
-
-    const player = session.players[name];
-    if (player) {
-      player.kicked = true;
-      const playerSocket = io.sockets.sockets.get(player.socketId);
-      if (playerSocket) {
-        playerSocket.emit('you-were-kicked');
-        playerSocket.leave(`player:${hostCode}`);
-      }
-      io.to(`host:${hostCode}`).emit('player-joined', {
-        players: getPlayerList(session)
-      });
-    }
+  socket.on('player:guess', ({ pence }) => {
+    const player = playerBySocket(socket);
+    if (!player) return;
+    if (phase !== 'guessing' || bidsIn) return socket.emit('guess:err', 'Bids are locked');
+    const round = settings.rounds[roundIndex];
+    if (!round) return;
+    const n = Number(pence);
+    if (!Number.isInteger(n) || n < 0 || n > 10000000000) return socket.emit('guess:err', 'Enter a price');
+    player.guesses[round.id] = n;
+    checkAllIn();
+    broadcast();
+    persistLive();
   });
 
-  socket.on('reset-session', async (callback) => {
-    try {
-      if (!hostCode) return callback({ error: 'No session' });
-      const oldCode = hostCode;
-      const session = sessions.get(oldCode);
-      if (!session) return callback({ error: 'Session not found' });
-
-      if (session.timerInterval) {
-        clearInterval(session.timerInterval);
-        session.timerInterval = null;
-      }
-
-      const newSess = newSession(session.rounds);
-      const newCode = newSess.code;
-      sessions.delete(oldCode);
-      sessions.set(newCode, newSess);
-      hostCode = newCode;
-
-      socket.leave(`host:${oldCode}`);
-      socket.join(`host:${newCode}`);
-
-      io.to(`player:${oldCode}`).emit('session-reset');
-
-      const { qrSvg, qrUrl } = await makeQr(newCode);
-
-      callback({ code: newCode, hostKey: newSess.hostKey, qrSvg, qrUrl });
-    } catch (err) {
-      console.error('reset-session error:', err);
-      callback({ error: err.message });
-    }
+  socket.on('host:name', ({ name }) => {
+    const clean = cleanName(name);
+    if (!clean) return;
+    const owned = /s$/i.test(clean) ? clean + "'" : clean + "'s";
+    settings.showTitle = owned.slice(0, 32);
+    settings.tagline = 'All prices are correct according to ' + clean + ' so deal with it....';
+    persistSettings();
+    broadcast();
   });
 
-  socket.on('join-session', ({ code, name }, callback) => {
-    const session = sessions.get(code);
-    if (!session) {
-      callback({ success: false, reason: 'Session not found' });
-      return;
-    }
-
-    const trimmedName = String(name || '').trim().slice(0, 24);
-    if (!trimmedName) {
-      callback({ success: false, reason: 'Name is required' });
-      return;
-    }
-
-    if (session.players[trimmedName]) {
-      const existing = session.players[trimmedName];
-      if (existing.connected && !existing.kicked && io.sockets.sockets.has(existing.socketId)) {
-        callback({ success: false, reason: 'Name already taken' });
-        return;
-      }
-      if (existing.kicked) {
-        callback({ success: false, reason: 'You have been kicked from this session' });
-        return;
-      }
-      existing.socketId = socket.id;
-      existing.connected = true;
-      currentPlayerName = trimmedName;
-      currentSessionCode = code;
-      socket.join(`player:${code}`);
-
-      const hasGuessed = existing.guesses[session.currentRound] !== undefined;
-
-      const timerRemaining = session.timer
-        ? Math.max(0, Math.ceil((session.timer.endAt - Date.now()) / 1000))
-        : null;
-
-      callback({
-        success: true,
-        name: trimmedName,
-        sessionCode: code,
-        phase: session.phase,
-        currentRound: session.currentRound,
-        totalRounds: session.rounds.length,
-        currentRoundName: session.currentRound >= 0 ? session.rounds[session.currentRound].name : null,
-        hasGuessed,
-        timerRemaining
-      });
-
-      session.lastActivity = Date.now();
-      io.to(`host:${code}`).emit('player-joined', {
-        players: getPlayerList(session)
-      });
-      if (session.phase === 'playing') emitGuessCount(session);
-      return;
-    }
-
-    const player = {
-      name: trimmedName,
-      socketId: socket.id,
-      connected: true,
-      joinedAt: Date.now(),
-      guesses: {},
-      kicked: false
-    };
-
-    session.players[trimmedName] = player;
-    session.totalScores[trimmedName] = 0;
-    currentPlayerName = trimmedName;
-    currentSessionCode = code;
-    socket.join(`player:${code}`);
-
-    callback({
-      success: true,
-      name: trimmedName,
-      sessionCode: code,
-      phase: session.phase,
-      currentRound: session.currentRound,
-      totalRounds: session.rounds.length,
-      currentRoundName: session.currentRound >= 0 ? session.rounds[session.currentRound].name : null,
-      hasGuessed: false,
-      timerRemaining: null
-    });
-
-    session.lastActivity = Date.now();
-    io.to(`host:${code}`).emit('player-joined', {
-      players: getPlayerList(session)
-    });
-    if (session.phase === 'playing') emitGuessCount(session);
+  socket.on('host:auth', ({ pin }) => {
+    if (!pinOk(pin)) return socket.emit('host:no');
+    const token = crypto.randomUUID();
+    hosts.add(token);
+    socket.emit('host:ok', { token });
   });
 
-  socket.on('submit-guess', ({ value }, callback) => {
-    if (!currentSessionCode || !currentPlayerName) {
-      callback({ success: false, reason: 'Not in a session' });
+  socket.on('host:settings', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    socket.emit('host:settings', hostSettings());
+  });
+
+  socket.on('host:save', ({ token, settings: next }) => {
+    if (!requireHost(socket, token)) return;
+    const err = applySettings(next || {});
+    if (err) return socket.emit('host:err', err);
+    broadcast();
+    socket.emit('host:saved');
+    socket.emit('host:settings', hostSettings());
+  });
+
+  socket.on('host:start', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    if (!settings.rounds.length) return socket.emit('host:err', 'Add a round first');
+    if (phase !== 'title' && phase !== 'podium') return;
+    phase = 'guessing';
+    roundIndex = 0;
+    bidsIn = false;
+    for (const player of players) player.guesses = {};
+    pushCue('start');
+    startRoundClock();
+    broadcast();
+    persistLive();
+  });
+
+  socket.on('host:lock', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    if (phase !== 'guessing' || bidsIn) return;
+    clearRoundTimer();
+    bidsIn = true;
+    pushCue('ding');
+    broadcast();
+    persistLive();
+  });
+
+  socket.on('host:reveal', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    if (phase !== 'guessing') return;
+    clearRoundTimer();
+    phase = 'revealed';
+    pushCue('reveal');
+    broadcast();
+    persistLive();
+  });
+
+  socket.on('host:next', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    if (phase === 'podium') {
+      clearRoundTimer();
+      roundEndsAt = 0;
+      phase = 'title';
+      roundIndex = 0;
+      bidsIn = false;
+      for (const player of players) player.guesses = {};
+      pushCue('title');
+      broadcast();
+      persistLive();
       return;
     }
-
-    const session = sessions.get(currentSessionCode);
-    if (!session) {
-      callback({ success: false, reason: 'Session not found' });
-      return;
+    if (phase !== 'revealed') return;
+    if (roundIndex + 1 >= settings.rounds.length) {
+      clearRoundTimer();
+      roundEndsAt = 0;
+      phase = 'podium';
+      pushCue('end');
+    } else {
+      roundIndex += 1;
+      phase = 'guessing';
+      bidsIn = false;
+      pushCue('round');
+      startRoundClock();
     }
+    broadcast();
+    persistLive();
+  });
 
-    if (session.phase !== 'playing') {
-      callback({ success: false, reason: 'Not in playing phase' });
-      return;
-    }
+  socket.on('host:refresh', () => {
+    wipeSession(true);
+  });
 
-    if (session.timer && Date.now() >= session.timer.endAt) {
-      callback({ success: false, reason: 'Time is up' });
-      return;
-    }
+  socket.on('host:reset', ({ token }) => {
+    if (!requireHost(socket, token)) return;
+    clearRoundTimer();
+    roundEndsAt = 0;
+    phase = 'title';
+    roundIndex = 0;
+    bidsIn = false;
+    for (const player of players) player.guesses = {};
+    pushCue('title');
+    broadcast();
+    persistLive();
+  });
 
-    const player = session.players[currentPlayerName];
-    if (!player || player.kicked) {
-      callback({ success: false, reason: 'Player not found' });
-      return;
-    }
-
-    const roundIndex = session.currentRound;
-    if (player.guesses[roundIndex] !== undefined) {
-      callback({ success: false, reason: 'Already submitted' });
-      return;
-    }
-
-    const guessValue = parseFloat(value);
-    if (isNaN(guessValue) || guessValue < 0) {
-      callback({ success: false, reason: 'Invalid guess' });
-      return;
-    }
-
-    player.guesses[roundIndex] = {
-      value: Math.round(guessValue * 100) / 100,
-      submittedAt: Date.now()
-    };
-
-    callback({ success: true });
-
-    session.lastActivity = Date.now();
-    emitGuessCount(session);
+  socket.on('host:remove', ({ token, id }) => {
+    if (!requireHost(socket, token)) return;
+    players = players.filter((p) => p.id !== id);
+    checkAllIn();
+    broadcast();
+    persistLive();
   });
 
   socket.on('disconnect', () => {
-    if (currentSessionCode && currentPlayerName) {
-      const session = sessions.get(currentSessionCode);
-      if (session && session.players[currentPlayerName]) {
-        // Ignore stale disconnects from an old socket after a reconnect
-        if (session.players[currentPlayerName].socketId === socket.id) {
-          session.players[currentPlayerName].connected = false;
-          io.to(`host:${currentSessionCode}`).emit('player-joined', {
-            players: getPlayerList(session)
-          });
-          if (session.phase === 'playing') emitGuessCount(session);
-        }
-      }
-    }
+    const player = playerBySocket(socket);
+    if (!player) return;
+    player.sockets.delete(socket.id);
+    broadcast();
   });
 });
 
-store.init().then(() => {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`TPIR Scores server running on port ${PORT}`);
-    console.log(`Local URL: ${getLocalURL()}`);
-  });
-}).catch((err) => {
-  console.error('Failed to initialise rounds store:', err);
-  process.exit(1);
+resumeRoundClock();
+setInterval(() => {
+  if (Date.now() - sessionStartedAt >= 60 * 60 * 1000) wipeSession(true);
+}, 15000);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Show on http://localhost:${PORT}`);
+  console.log(`Data: ${DATA}`);
 });

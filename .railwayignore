@@ -1,0 +1,10 @@
+node_modules
+.git
+.DS_Store
+Images
+title.png
+round.png
+round reveal.png
+data/live.json
+data/settings.json
+data/uploads

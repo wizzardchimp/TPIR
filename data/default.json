@@ -1,0 +1,48 @@
+{
+  "showTitle": "WMROCU'S",
+  "showSubtitle": "PRICE IS RIGHT",
+  "tagline": "All prices are correct according to host so deal with it....",
+  "contentPack": 2,
+  "rounds": [
+    {
+      "id": "beans",
+      "title": "Tin of Beans",
+      "short": "Beans",
+      "source": "ASDA",
+      "points": [],
+      "pricePence": 38,
+      "image": "/rounds/beans.webp",
+      "audio": "r1.mp3"
+    },
+    {
+      "id": "greggs",
+      "title": "How much is {host} Greggs order?",
+      "short": "Greggs",
+      "source": "Greggs Website",
+      "points": ["1 x Sausage Roll", "1 x Chicken Bites", "1 x Orange Lucozade"],
+      "pricePence": 545,
+      "image": "/rounds/greggs.jpeg",
+      "audio": "r1.mp3"
+    },
+    {
+      "id": "prison",
+      "title": "How much does one prisoner cost for a year?",
+      "short": "Prisoner",
+      "source": "Home Office",
+      "points": [],
+      "pricePence": 5652500,
+      "image": "/rounds/prison.webp",
+      "audio": "r1.mp3"
+    },
+    {
+      "id": "fraud",
+      "title": "How much money is stolen from victims in the West Midlands per week?",
+      "short": "Fraud",
+      "source": "Cyber and fraud offences",
+      "points": [],
+      "pricePence": 100000000,
+      "image": "/rounds/fraud.png",
+      "audio": "r1.mp3"
+    }
+  ]
+}
