@@ -12,6 +12,7 @@ const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT) || 3000;
 const PIN = process.env.HOST_PIN || '1234';
+if (!process.env.HOST_PIN) console.warn('WARNING: HOST_PIN is not set - using the default PIN 1234. Set HOST_PIN.');
 const AUDIO = new Set(['intro.mp3', 'r1.mp3', 'end.mp3', 'dingding.mp3', 'reveal.mp3', 'scores.mp3']);
 const BEDS = ['r1.mp3'];
 
@@ -97,9 +98,10 @@ let roundTimer = null;
 let players = [];
 let sessionCode = '';
 let sessionStartedAt = Date.now();
+let lastActivity = Date.now();
+const IDLE_WIPE_MS = 3 * 60 * 60 * 1000;
 let cueSeq = 0;
 let cue = { seq: 0, name: '' };
-const hosts = new Set();
 
 function makeCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -118,6 +120,7 @@ function loadLive() {
   roundTimedOut = Boolean(live.roundTimedOut);
   if (typeof live.sessionCode === 'string' && live.sessionCode) sessionCode = live.sessionCode;
   sessionStartedAt = Number(live.sessionStartedAt) || Date.now();
+  lastActivity = Number(live.lastActivity) || sessionStartedAt;
   if (Array.isArray(live.players)) {
     players = live.players.map((p) => ({
       id: safeId(p.id) || crypto.randomUUID(),
@@ -153,6 +156,7 @@ if ((settings.contentPack || 0) < 2) {
 }
 
 function persistLive() {
+  lastActivity = Date.now();
   try {
     writeJson(LIVE_FILE, {
       phase,
@@ -162,6 +166,7 @@ function persistLive() {
       roundTimedOut,
       sessionCode,
       sessionStartedAt,
+      lastActivity,
       players: players.map((p) => ({
         id: p.id,
         token: p.token,
@@ -175,7 +180,7 @@ function persistLive() {
 }
 
 loadLive();
-if (!sessionCode || Date.now() - sessionStartedAt >= 60 * 60 * 1000) {
+if (!sessionCode || Date.now() - lastActivity >= IDLE_WIPE_MS) {
   sessionCode = makeCode();
   sessionStartedAt = Date.now();
   phase = 'title';
@@ -188,6 +193,14 @@ if (!sessionCode || Date.now() - sessionStartedAt >= 60 * 60 * 1000) {
 
 function cleanName(name) {
   return String(name || '').replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
+const HOST_TOKEN = crypto.createHmac('sha256', PIN).update('tpir-host-v1').digest('hex');
+
+function tokenOk(token) {
+  const got = Buffer.from(String(token || ''));
+  const want = Buffer.from(HOST_TOKEN);
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
 }
 
 function pinOk(pin) {
@@ -310,7 +323,7 @@ function publicState() {
         scores,
         total: playedScores.reduce((sum, x) => sum + x, 0),
         played: playedScores.length,
-        guessPence: currentGuess != null ? Number(currentGuess) : null,
+        guessPence: currentGuess != null && (bidsIn || phase !== 'guessing') ? Number(currentGuess) : null,
       };
     }),
   };
@@ -470,6 +483,7 @@ app.use('/uploads', express.static(UPLOADS));
 app.use(express.static(PUBLIC));
 
 app.post('/api/upload', (req, res) => {
+  if (!tokenOk(req.get('x-host-token'))) return res.status(401).json({ error: 'Host PIN required' });
   upload.single('image')(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'Could not take that image' });
     if (!req.file) return res.status(400).json({ error: 'Use a JPG, PNG, or WebP' });
@@ -480,8 +494,10 @@ app.post('/api/upload', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server);
 
-function requireHost() {
-  return true;
+function requireHost(socket, token) {
+  if (tokenOk(token)) return true;
+  socket.emit('host:no');
+  return false;
 }
 
 function clearRoundTimer() {
@@ -544,6 +560,9 @@ io.on('connection', (socket) => {
       return socket.emit('join:err', 'Join again');
     }
     let player = players.find((p) => p.token === token);
+    if (players.some((p) => p !== player && p.name.toLowerCase() === clean.toLowerCase())) {
+      return socket.emit('join:err', 'That name is taken');
+    }
     if (!player) {
       if (players.length >= 40) return socket.emit('join:err', 'The show is full');
       player = { id: crypto.randomUUID(), token, name: clean, guesses: {}, sockets: new Set() };
@@ -572,7 +591,8 @@ io.on('connection', (socket) => {
     persistLive();
   });
 
-  socket.on('host:name', ({ name }) => {
+  socket.on('host:name', ({ token, name }) => {
+    if (!requireHost(socket, token)) return;
     const clean = cleanName(name);
     if (!clean) return;
     const owned = /s$/i.test(clean) ? clean + "'" : clean + "'s";
@@ -584,9 +604,7 @@ io.on('connection', (socket) => {
 
   socket.on('host:auth', ({ pin }) => {
     if (!pinOk(pin)) return socket.emit('host:no');
-    const token = crypto.randomUUID();
-    hosts.add(token);
-    socket.emit('host:ok', { token });
+    socket.emit('host:ok', { token: HOST_TOKEN });
   });
 
   socket.on('host:settings', ({ token }) => {
@@ -668,7 +686,8 @@ io.on('connection', (socket) => {
     persistLive();
   });
 
-  socket.on('host:refresh', () => {
+  socket.on('host:refresh', ({ token } = {}) => {
+    if (!requireHost(socket, token)) return;
     wipeSession(true);
   });
 
@@ -703,7 +722,7 @@ io.on('connection', (socket) => {
 
 resumeRoundClock();
 setInterval(() => {
-  if (Date.now() - sessionStartedAt >= 60 * 60 * 1000) wipeSession(true);
+  if (Date.now() - lastActivity >= IDLE_WIPE_MS) wipeSession(true);
 }, 15000);
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Show on http://localhost:${PORT}`);
