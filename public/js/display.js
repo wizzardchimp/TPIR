@@ -2,6 +2,7 @@ const socket = io();
 let state = null;
 let hostToken = sessionStorage.getItem('tpirHost') || '';
 let pending = null;
+let autoAuthSent = false;
 let booted = false;
 let lastSeq = 0;
 let shownPrice = false;
@@ -1213,6 +1214,10 @@ socket.on('state', (next) => {
   const play = booted && seq > lastSeq;
   lastSeq = seq;
   state = next;
+  if (!hostToken && next.pinRequired === false && !autoAuthSent) {
+    autoAuthSent = true;
+    socket.emit('host:auth', { pin: '' });
+  }
   if (!booted) {
     booted = true;
     render();
@@ -1239,6 +1244,10 @@ socket.on('host:ok', ({ token }) => {
 socket.on('host:no', () => {
   hostToken = '';
   sessionStorage.removeItem('tpirHost');
+  if (state && state.pinRequired === false) {
+    socket.emit('host:auth', { pin: '' });
+    return;
+  }
   document.getElementById('pin-err').textContent = 'Wrong PIN';
   if (!document.getElementById('pin-pop').classList.contains('hidden')) return;
   openPin();

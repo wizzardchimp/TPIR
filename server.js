@@ -11,8 +11,9 @@ const { Server } = require('socket.io');
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT) || 3000;
-const PIN = process.env.HOST_PIN || '1234';
-if (!process.env.HOST_PIN) console.warn('WARNING: HOST_PIN is not set - using the default PIN 1234. Set HOST_PIN.');
+// Optional. With no HOST_PIN the host screen is trusted automatically (no PIN prompt).
+const PIN = process.env.HOST_PIN || '';
+const PIN_REQUIRED = Boolean(PIN);
 const AUDIO = new Set(['intro.mp3', 'r1.mp3', 'end.mp3', 'dingding.mp3', 'reveal.mp3', 'scores.mp3']);
 const BEDS = ['r1.mp3'];
 
@@ -195,7 +196,7 @@ function cleanName(name) {
   return String(name || '').replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
 }
 
-const HOST_TOKEN = crypto.createHmac('sha256', PIN).update('tpir-host-v1').digest('hex');
+const HOST_TOKEN = crypto.createHmac('sha256', PIN || 'tpir-open').update('tpir-host-v1').digest('hex');
 
 function tokenOk(token) {
   const got = Buffer.from(String(token || ''));
@@ -204,6 +205,7 @@ function tokenOk(token) {
 }
 
 function pinOk(pin) {
+  if (!PIN_REQUIRED) return true;
   const got = Buffer.from(String(pin || ''));
   const want = Buffer.from(PIN);
   if (got.length !== want.length) return false;
@@ -288,6 +290,7 @@ function publicState() {
     timedOut: phase === 'guessing' && bidsIn && roundTimedOut,
     roundMs: 60000,
     sessionCode,
+    pinRequired: PIN_REQUIRED,
     cue,
     showTitle: settings.showTitle,
     showSubtitle: settings.showSubtitle,
