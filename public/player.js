@@ -151,7 +151,16 @@ socket.on('round-results', (data) => {
   // Find this player's result
   const myResult = data.rankings.find(r => r.name === playerName);
 
-  if (myResult) {
+  if (!myResult) {
+    document.getElementById('resultGuess').textContent = '—';
+    document.getElementById('resultActual').textContent = `£${formatPrice(data.roundPrice)}`;
+    const diffEl = document.getElementById('resultDiff');
+    diffEl.textContent = 'No guess submitted';
+    diffEl.style.color = '#ff4444';
+    document.getElementById('resultPoints').textContent = '0';
+    document.getElementById('resultLabel').textContent = 'No points this round';
+    document.getElementById('resultTotal').textContent = totalScores[playerName] || 0;
+  } else {
     document.getElementById('resultGuess').textContent = `£${myResult.guess.toFixed(2)}`;
     document.getElementById('resultActual').textContent = `£${formatPrice(data.roundPrice)}`;
 
@@ -211,11 +220,17 @@ socket.on('session-reset', () => {
 
 socket.on('disconnect', () => {
   showPlayerScreen('playerWaiting');
-  document.querySelector('#playerWaiting h2').textContent = 'Reconnecting...';
+  document.getElementById('waitingTitle').textContent = 'Reconnecting...';
 });
 
+let firstConnect = true;
 socket.on('connect', () => {
+  // The initial join is done on page load; only re-join after a drop
+  if (firstConnect) { firstConnect = false; return; }
   if (sessionCode && playerName) {
-    socket.emit('join-session', { code: sessionCode, name: playerName }, () => {});
+    socket.emit('join-session', { code: sessionCode, name: playerName }, (response) => {
+      document.getElementById('waitingTitle').textContent = 'Waiting for host...';
+      if (response && response.success && response.phase === 'playing') showPlayerScreen('playerGuess');
+    });
   }
 });

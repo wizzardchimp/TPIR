@@ -27,13 +27,45 @@ process.on('unhandledRejection', (reason) => {
 const PORT = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
 
+const store = require('./store');
+const crypto = require('crypto');
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+if (!ADMIN_TOKEN) {
+  console.warn('WARNING: ADMIN_TOKEN is not set - anyone can host games and edit rounds. Set it in Railway variables.');
+}
+
+function tokenOk(token) {
+  if (!ADMIN_TOKEN) return true;
+  const a = Buffer.from(String(token || ''));
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireAdmin(req, res, next) {
+  if (tokenOk(req.get('x-admin-token'))) return next();
+  res.status(401).json({ error: 'Invalid host password' });
+}
+
+app.use(express.json({ limit: '200kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (req, res) => res.send('ok'));
 
-const defaultRounds = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'public', 'data', 'default-rounds.json'), 'utf-8')
-);
+// Host auth check (host page uses this to show the password prompt)
+app.post('/api/auth', requireAdmin, (req, res) => res.json({ ok: true, open: !ADMIN_TOKEN }));
+
+// Rounds live in cloud storage. Prices are only served to authenticated hosts.
+app.get('/api/rounds', requireAdmin, (req, res) => res.json(store.getAll()));
+app.put('/api/rounds', requireAdmin, async (req, res) => {
+  try {
+    const rounds = await store.setAll(req.body);
+    io.to('hosts').emit('rounds-updated', rounds);
+    res.json(rounds);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 const sessions = new Map();
 
@@ -53,7 +85,7 @@ function getLocalURL() {
 function generateCode() {
   let code;
   do {
-    code = String(Math.floor(100 + Math.random() * 900));
+    code = String(Math.floor(1000 + Math.random() * 9000));
   } while (sessions.has(code));
   return code;
 }
@@ -64,9 +96,31 @@ function getPlayerList(session) {
     .map(p => ({
       name: p.name,
       connected: p.connected,
-      joinedAt: p.joinedAt
+      joinedAt: p.joinedAt,
+      guessed: session.phase === 'playing' && p.guesses[session.currentRound] !== undefined
     }));
 }
+
+function emitGuessCount(session) {
+  const active = Object.values(session.players).filter(p => !p.kicked);
+  const submitted = active.filter(p => p.guesses[session.currentRound] !== undefined).length;
+  io.to(`host:${session.code}`).emit('guess-count', {
+    submitted,
+    total: active.length,
+    players: getPlayerList(session)
+  });
+}
+
+// Drop abandoned sessions after 12h of inactivity
+setInterval(() => {
+  const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+  for (const [code, s] of sessions) {
+    if (s.lastActivity < cutoff) {
+      if (s.timerInterval) clearInterval(s.timerInterval);
+      sessions.delete(code);
+    }
+  }
+}, 30 * 60 * 1000).unref();
 
 function calculateRoundResults(session, roundIndex) {
   const round = session.rounds[roundIndex];
@@ -143,40 +197,87 @@ io.engine.on('connection_error', (err) => {
 
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id);
-  let currentSessionCode = null;
+  let hostCode = null;          // set only for the authenticated host socket
+  let currentSessionCode = null; // set only for player sockets
   let currentPlayerName = null;
 
-  socket.on('create-session', async ({ rounds }, callback) => {
+  async function makeQr(code) {
+    const baseUrl = PUBLIC_URL || getLocalURL();
+    const qrUrl = `${baseUrl}/join.html?code=${code}`;
+    const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
+    return { qrSvg, qrUrl };
+  }
+
+  function newSession(rounds) {
+    const code = generateCode();
+    return {
+      code,
+      hostKey: crypto.randomBytes(16).toString('hex'),
+      rounds,
+      currentRound: -1,
+      phase: 'setup',
+      players: {},
+      timer: null,
+      timerInterval: null,
+      totalScores: {},
+      lastActivity: Date.now()
+    };
+  }
+
+  // Hosts listen for live round-list changes from the cloud store
+  socket.on('host-subscribe', ({ token }) => {
+    if (tokenOk(token)) socket.join('hosts');
+  });
+
+  socket.on('create-session', async ({ token, roundIds }, callback) => {
     try {
-      const code = generateCode();
-      const session = {
-        code,
-        rounds: rounds || defaultRounds,
-        currentRound: -1,
-        phase: 'setup',
-        players: {},
-        timer: null,
-        timerInterval: null,
-        totalScores: {}
-      };
-      sessions.set(code, session);
-      currentSessionCode = code;
-      socket.join(`host:${code}`);
+      if (!tokenOk(token)) return callback({ error: 'Invalid host password' });
+      // Rounds always come from the cloud store, never from the client.
+      const all = store.getAll();
+      const rounds = Array.isArray(roundIds)
+        ? roundIds.map(id => all.find(r => r.id === id)).filter(Boolean).map(r => ({ ...r }))
+        : all.map(r => ({ ...r }));
+      if (rounds.length === 0) return callback({ error: 'Select at least one round' });
 
-      const baseUrl = PUBLIC_URL || getLocalURL();
-      const qrUrl = `${baseUrl}/join.html?code=${code}`;
-      const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
+      const session = newSession(rounds);
+      sessions.set(session.code, session);
+      hostCode = session.code;
+      socket.join(`host:${session.code}`);
+      socket.join('hosts');
 
-      callback({ code, qrSvg, qrUrl });
+      callback({ code: session.code, hostKey: session.hostKey, ...(await makeQr(session.code)) });
     } catch (err) {
       console.error('create-session error:', err);
       callback({ error: err.message });
     }
   });
 
+  // Host refreshed the page / lost connection: take the session back
+  socket.on('host-rejoin', async ({ code, hostKey }, callback) => {
+    const session = sessions.get(code);
+    if (!session || session.hostKey !== hostKey) return callback({ error: 'Session not found' });
+    hostCode = code;
+    socket.join(`host:${code}`);
+    socket.join('hosts');
+    session.lastActivity = Date.now();
+    const round = session.rounds[session.currentRound];
+    callback({
+      code,
+      ...(await makeQr(code)),
+      phase: session.phase,
+      players: getPlayerList(session),
+      totalRounds: session.rounds.length,
+      currentRound: session.currentRound,
+      roundName: round ? round.name : null,
+      roundPrice: round && session.phase === 'results' ? round.price : null,
+      remaining: session.timer ? Math.max(0, Math.ceil((session.timer.endAt - Date.now()) / 1000)) : null,
+      totalScores: session.totalScores
+    });
+  });
+
   socket.on('start-game', () => {
-    if (!currentSessionCode) return;
-    const session = sessions.get(currentSessionCode);
+    if (!hostCode) return;
+    const session = sessions.get(hostCode);
     if (!session || Object.keys(session.players).length === 0) return;
 
     session.phase = 'lobby';
@@ -186,18 +287,18 @@ io.on('connection', (socket) => {
       session.totalScores[name] = 0;
     }
 
-    io.to(`host:${currentSessionCode}`).emit('game-started', {
+    io.to(`host:${hostCode}`).emit('game-started', {
       players: getPlayerList(session),
       totalRounds: session.rounds.length
     });
-    io.to(`player:${currentSessionCode}`).emit('game-started', {
+    io.to(`player:${hostCode}`).emit('game-started', {
       totalRounds: session.rounds.length
     });
   });
 
   socket.on('start-round', () => {
-    if (!currentSessionCode) return;
-    const session = sessions.get(currentSessionCode);
+    if (!hostCode) return;
+    const session = sessions.get(hostCode);
     if (!session) return;
 
     const roundIndex = session.currentRound;
@@ -205,49 +306,53 @@ io.on('connection', (socket) => {
     if (!round) return;
 
     session.phase = 'playing';
+    session.lastActivity = Date.now();
 
     if (session.timerInterval) {
       clearInterval(session.timerInterval);
       session.timerInterval = null;
     }
 
-    const endAt = Date.now() + 45000;
+    const seconds = round.seconds || 45;
+    const endAt = Date.now() + seconds * 1000;
     session.timer = { endAt };
 
-    io.to(`host:${currentSessionCode}`).emit('timer-started', {
+    io.to(`host:${hostCode}`).emit('timer-started', {
       roundIndex,
       roundName: round.name,
       roundPrice: round.price,
-      seconds: 45,
+      seconds,
       roundNumber: roundIndex + 1,
       totalRounds: session.rounds.length
     });
-    io.to(`player:${currentSessionCode}`).emit('timer-started', {
+    io.to(`player:${hostCode}`).emit('timer-started', {
       roundIndex,
       roundName: round.name,
-      seconds: 45,
+      seconds,
       roundNumber: roundIndex + 1,
       totalRounds: session.rounds.length
     });
+
+    emitGuessCount(session);
 
     session.timerInterval = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((session.timer.endAt - Date.now()) / 1000));
 
-      io.to(`host:${currentSessionCode}`).emit('timer-tick', { remaining });
-      io.to(`player:${currentSessionCode}`).emit('timer-tick', { remaining });
+      io.to(`host:${hostCode}`).emit('timer-tick', { remaining });
+      io.to(`player:${hostCode}`).emit('timer-tick', { remaining });
 
       if (remaining <= 0) {
         clearInterval(session.timerInterval);
         session.timerInterval = null;
-        io.to(`host:${currentSessionCode}`).emit('time-up');
-        io.to(`player:${currentSessionCode}`).emit('time-up');
+        io.to(`host:${hostCode}`).emit('time-up');
+        io.to(`player:${hostCode}`).emit('time-up');
       }
     }, 1000);
   });
 
   socket.on('show-results', () => {
-    if (!currentSessionCode) return;
-    const session = sessions.get(currentSessionCode);
+    if (!hostCode) return;
+    const session = sessions.get(hostCode);
     if (!session) return;
 
     if (session.timerInterval) {
@@ -266,14 +371,14 @@ io.on('connection', (socket) => {
     session.phase = 'results';
     const round = session.rounds[session.currentRound];
 
-    io.to(`host:${currentSessionCode}`).emit('round-results', {
+    io.to(`host:${hostCode}`).emit('round-results', {
       roundIndex: session.currentRound,
       roundName: round.name,
       roundPrice: round.price,
       rankings,
       totalScores: session.totalScores
     });
-    io.to(`player:${currentSessionCode}`).emit('round-results', {
+    io.to(`player:${hostCode}`).emit('round-results', {
       roundIndex: session.currentRound,
       roundName: round.name,
       roundPrice: round.price,
@@ -283,29 +388,29 @@ io.on('connection', (socket) => {
   });
 
   socket.on('next-round', () => {
-    if (!currentSessionCode) return;
-    const session = sessions.get(currentSessionCode);
+    if (!hostCode) return;
+    const session = sessions.get(hostCode);
     if (!session) return;
 
     session.currentRound++;
 
     if (session.currentRound >= session.rounds.length) {
       session.phase = 'finished';
-      io.to(`host:${currentSessionCode}`).emit('game-finished', {
+      io.to(`host:${hostCode}`).emit('game-finished', {
         totalScores: session.totalScores
       });
-      io.to(`player:${currentSessionCode}`).emit('game-finished', {
+      io.to(`player:${hostCode}`).emit('game-finished', {
         totalScores: session.totalScores
       });
     } else {
       session.phase = 'lobby';
       const round = session.rounds[session.currentRound];
-      io.to(`host:${currentSessionCode}`).emit('round-ready', {
+      io.to(`host:${hostCode}`).emit('round-ready', {
         roundNumber: session.currentRound + 1,
         roundName: round.name,
         totalRounds: session.rounds.length
       });
-      io.to(`player:${currentSessionCode}`).emit('round-ready', {
+      io.to(`player:${hostCode}`).emit('round-ready', {
         roundNumber: session.currentRound + 1,
         totalRounds: session.rounds.length
       });
@@ -313,8 +418,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('kick-player', ({ name }) => {
-    if (!currentSessionCode) return;
-    const session = sessions.get(currentSessionCode);
+    if (!hostCode) return;
+    const session = sessions.get(hostCode);
     if (!session) return;
 
     const player = session.players[name];
@@ -323,9 +428,9 @@ io.on('connection', (socket) => {
       const playerSocket = io.sockets.sockets.get(player.socketId);
       if (playerSocket) {
         playerSocket.emit('you-were-kicked');
-        playerSocket.leave(`player:${currentSessionCode}`);
+        playerSocket.leave(`player:${hostCode}`);
       }
-      io.to(`host:${currentSessionCode}`).emit('player-joined', {
+      io.to(`host:${hostCode}`).emit('player-joined', {
         players: getPlayerList(session)
       });
     }
@@ -333,8 +438,8 @@ io.on('connection', (socket) => {
 
   socket.on('reset-session', async (callback) => {
     try {
-      if (!currentSessionCode) return callback({ error: 'No session' });
-      const oldCode = currentSessionCode;
+      if (!hostCode) return callback({ error: 'No session' });
+      const oldCode = hostCode;
       const session = sessions.get(oldCode);
       if (!session) return callback({ error: 'Session not found' });
 
@@ -343,32 +448,20 @@ io.on('connection', (socket) => {
         session.timerInterval = null;
       }
 
-      const newCode = generateCode();
+      const newSess = newSession(session.rounds);
+      const newCode = newSess.code;
       sessions.delete(oldCode);
-
-      const newSession = {
-        code: newCode,
-        rounds: session.rounds,
-        currentRound: -1,
-        phase: 'setup',
-        players: {},
-        timer: null,
-        timerInterval: null,
-        totalScores: {}
-      };
-      sessions.set(newCode, newSession);
-      currentSessionCode = newCode;
+      sessions.set(newCode, newSess);
+      hostCode = newCode;
 
       socket.leave(`host:${oldCode}`);
       socket.join(`host:${newCode}`);
 
       io.to(`player:${oldCode}`).emit('session-reset');
 
-      const baseUrl = PUBLIC_URL || getLocalURL();
-      const qrUrl = `${baseUrl}/join.html?code=${newCode}`;
-      const qrSvg = await QRCode.toString(qrUrl, { type: 'svg', margin: 1, width: 256, color: { dark: '#d4a843', light: '#0a1628' } });
+      const { qrSvg, qrUrl } = await makeQr(newCode);
 
-      callback({ code: newCode, qrSvg, qrUrl });
+      callback({ code: newCode, hostKey: newSess.hostKey, qrSvg, qrUrl });
     } catch (err) {
       console.error('reset-session error:', err);
       callback({ error: err.message });
@@ -382,7 +475,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const trimmedName = name.trim();
+    const trimmedName = String(name || '').trim().slice(0, 24);
     if (!trimmedName) {
       callback({ success: false, reason: 'Name is required' });
       return;
@@ -390,7 +483,7 @@ io.on('connection', (socket) => {
 
     if (session.players[trimmedName]) {
       const existing = session.players[trimmedName];
-      if (existing.connected && !existing.kicked) {
+      if (existing.connected && !existing.kicked && io.sockets.sockets.has(existing.socketId)) {
         callback({ success: false, reason: 'Name already taken' });
         return;
       }
@@ -422,9 +515,11 @@ io.on('connection', (socket) => {
         timerRemaining
       });
 
+      session.lastActivity = Date.now();
       io.to(`host:${code}`).emit('player-joined', {
         players: getPlayerList(session)
       });
+      if (session.phase === 'playing') emitGuessCount(session);
       return;
     }
 
@@ -455,9 +550,11 @@ io.on('connection', (socket) => {
       timerRemaining: null
     });
 
+    session.lastActivity = Date.now();
     io.to(`host:${code}`).emit('player-joined', {
       players: getPlayerList(session)
     });
+    if (session.phase === 'playing') emitGuessCount(session);
   });
 
   socket.on('submit-guess', ({ value }, callback) => {
@@ -507,27 +604,33 @@ io.on('connection', (socket) => {
 
     callback({ success: true });
 
-    const submitted = Object.values(session.players)
-      .filter(p => !p.kicked && p.guesses[roundIndex] !== undefined).length;
-    const total = Object.values(session.players).filter(p => !p.kicked).length;
-
-    io.to(`host:${currentSessionCode}`).emit('guess-count', { submitted, total });
+    session.lastActivity = Date.now();
+    emitGuessCount(session);
   });
 
   socket.on('disconnect', () => {
     if (currentSessionCode && currentPlayerName) {
       const session = sessions.get(currentSessionCode);
       if (session && session.players[currentPlayerName]) {
-        session.players[currentPlayerName].connected = false;
-        io.to(`host:${currentSessionCode}`).emit('player-joined', {
-          players: getPlayerList(session)
-        });
+        // Ignore stale disconnects from an old socket after a reconnect
+        if (session.players[currentPlayerName].socketId === socket.id) {
+          session.players[currentPlayerName].connected = false;
+          io.to(`host:${currentSessionCode}`).emit('player-joined', {
+            players: getPlayerList(session)
+          });
+          if (session.phase === 'playing') emitGuessCount(session);
+        }
       }
     }
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`TPIR Scores server running on port ${PORT}`);
-  console.log(`Local URL: ${getLocalURL()}`);
+store.init().then(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`TPIR Scores server running on port ${PORT}`);
+    console.log(`Local URL: ${getLocalURL()}`);
+  });
+}).catch((err) => {
+  console.error('Failed to initialise rounds store:', err);
+  process.exit(1);
 });

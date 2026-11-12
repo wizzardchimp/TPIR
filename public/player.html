@@ -15,8 +15,8 @@
 
     <!-- WAITING SCREEN -->
     <div id="playerWaiting" class="screen active">
-      <div class="waiting-message" style="flex:1; display:flex; flex-direction:column; justify-content:center">
-        <h2>Waiting for host...</h2>
+      <div class="waiting-message">
+        <h2 id="waitingTitle">Waiting for host...</h2>
         <p>The game hasn't started yet or the host is reviewing results.</p>
         <div class="waiting-spinner"></div>
       </div>
@@ -39,7 +39,7 @@
     </div>
 
     <!-- RESULT SCREEN -->
-    <div id="playerResult" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center">
+    <div id="playerResult" class="screen screen-center">
       <div class="player-result">
         <div class="result-label">Your Guess</div>
         <div class="guess-value" id="resultGuess">£0.00</div>
@@ -61,7 +61,7 @@
     </div>
 
     <!-- FINAL SCREEN -->
-    <div id="playerFinal" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center">
+    <div id="playerFinal" class="screen screen-center">
       <div class="text-center" style="padding:24px">
         <h2 style="font-size:1.8rem; color:#f5d76e; margin-bottom:16px">🏆 Game Over!</h2>
         <div id="playerFinalRank" style="font-size:1.2rem; margin-bottom:8px"></div>
@@ -71,7 +71,7 @@
     </div>
 
     <!-- KICKED SCREEN -->
-    <div id="playerKicked" class="screen" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center">
+    <div id="playerKicked" class="screen screen-center">
       <div class="text-center" style="padding:24px">
         <h2 style="font-size:1.5rem; color:#ff4444; margin-bottom:12px">You Were Kicked</h2>
         <p style="color:rgba(255,255,255,0.5)">The host has removed you from the session.</p>

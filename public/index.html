@@ -11,23 +11,49 @@
     <h1 class="title">🏆 Price Is Right</h1>
     <p class="subtitle">Scoreboard Dashboard</p>
 
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="screen active">
+      <div class="card" style="max-width:420px; margin:0 auto">
+        <h2 class="card-title">Host Login</h2>
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="hostPassword">Host password</label>
+            <input type="password" id="hostPassword" autocomplete="current-password" placeholder="Enter host password">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Log in</button>
+          <div id="loginError" class="join-error"></div>
+        </form>
+      </div>
+    </div>
+
     <!-- SETUP SCREEN -->
-    <div id="setupScreen" class="screen active">
+    <div id="setupScreen" class="screen">
       <div class="card">
-        <h2 class="card-title">Game Rounds</h2>
-        <p style="color:rgba(255,255,255,0.5); margin-bottom:16px; font-size:0.9rem">
-          Select which rounds to include in the game.
+        <div class="session-header">
+          <h2 class="card-title" style="margin:0">Game Rounds</h2>
+          <span class="cloud-status" id="cloudStatus">☁ Loading…</span>
+        </div>
+        <p class="muted-text">
+          Rounds are stored in the cloud - edits are shared by every host instantly.
+          Tick the rounds to play, then press Create Session.
         </p>
         <table id="roundsTable">
           <thead>
             <tr>
-              <th style="width:60px">Include</th>
+              <th style="width:60px">Play</th>
               <th>Item</th>
-              <th style="width:120px">Price</th>
+              <th style="width:130px">Price (£)</th>
+              <th style="width:100px">Secs</th>
+              <th style="width:130px">Edit</th>
             </tr>
           </thead>
           <tbody id="roundsBody"></tbody>
         </table>
+        <div class="editor-actions">
+          <button class="btn btn-secondary btn-sm" id="addRoundBtn">+ Add round</button>
+          <button class="btn btn-secondary btn-sm hidden" id="saveRoundsBtn">☁ Save to cloud</button>
+          <button class="btn btn-secondary btn-sm hidden" id="discardRoundsBtn">Discard changes</button>
+        </div>
         <div class="text-center mt-20">
           <button class="btn btn-primary" id="createSessionBtn">Create Session</button>
         </div>
@@ -78,6 +104,7 @@
         <div class="round-item-name" id="gameItemName">Item Name</div>
         <div class="timer-display" id="gameTimer">0:45</div>
         <div class="submission-count" id="submissionCount">Submitted: <span>0</span> / <span>0</span></div>
+        <div class="chips" id="submitters"></div>
       </div>
 
       <div class="text-center mt-20">

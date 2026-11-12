@@ -13,7 +13,7 @@
       <form id="joinForm">
         <div class="form-group">
           <label for="sessionCode">Session Code</label>
-          <input type="text" id="sessionCode" maxlength="3" placeholder="429" inputmode="numeric" pattern="[0-9]*">
+          <input type="text" id="sessionCode" maxlength="4" placeholder="4291" inputmode="numeric" pattern="[0-9]*">
         </div>
         <div class="form-group">
           <label for="playerName">Team Name</label>
@@ -40,8 +40,8 @@
       const errorEl = document.getElementById('joinError');
       const btn = document.getElementById('joinBtn');
 
-      if (!code || code.length !== 3) {
-        errorEl.textContent = 'Please enter a 3-digit session code';
+      if (!code || code.length !== 4) {
+        errorEl.textContent = 'Please enter a 4-digit session code';
         return;
       }
       if (!name) {
