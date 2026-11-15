@@ -12,7 +12,7 @@ npm start
 - `HOST_PIN` - optional. Leave it unset for no PIN: the host screen (`/`) is trusted automatically. Set it to require a PIN.
 - `DATA_DIR` - persistent volume path (e.g. `/data`). Rounds you edit in the host editor are saved here, so they
   survive deploys and are shared by everyone using the show.
-- `BRAVE_API_KEY` - optional. Turns on "Find photo" and "Suggest" price lookups in the settings console (free key at brave.com/search/api; it needs the Search plan, not just Images).
+- `BRAVE_API_KEY` - optional. Without it, "Find photo" uses free Wikimedia Commons images and "Suggest" price lookups are off. With a key (brave.com/search/api, Search plan) photos come from Brave image search and "Suggest" works.
 - `PUBLIC_URL` - public URL used for the QR code, e.g. `https://tpir.up.railway.app`.
 
 ## Host controls

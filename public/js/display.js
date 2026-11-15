@@ -808,7 +808,7 @@ let consoleTab = 'rounds';
 let openRoundId = '';
 let beds = [];
 let consoleErr = '';
-let meta = { setId: 'default', activeSetId: 'default', sets: [], search: false };
+let meta = { setId: 'default', activeSetId: 'default', sets: [], search: { images: false, prices: false, provider: '' } };
 let editingSetId = '';
 const webUi = {}; // per-round photo/price search UI state (not part of the saved draft)
 
@@ -826,7 +826,7 @@ function consoleOpen() {
 }
 function loadDraft(settings) {
   beds = settings.beds || [];
-  meta = { setId: settings.setId, activeSetId: settings.activeSetId, sets: settings.sets || [], search: Boolean(settings.search) };
+  meta = { setId: settings.setId, activeSetId: settings.activeSetId, sets: settings.sets || [], search: settings.search || { images: false, prices: false, provider: '' } };
   editingSetId = settings.setId;
   draft = {
     setName: settings.setName || '',
@@ -1207,12 +1207,12 @@ function titleField(round, updateHead, ui) {
   input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); runImageSearch(round, 0, round.title); } };
   const find = el('button', 'btn ghost find-btn', 'Find photo');
   find.type = 'button';
-  find.disabled = !meta.search;
-  find.title = meta.search ? 'Search the web for example photos' : 'Needs BRAVE_API_KEY on the server';
+  find.disabled = !meta.search.images;
+  find.title = 'Search the web for example photos';
   find.onclick = () => runImageSearch(round, 0, round.title);
   row.append(input, find);
   wrap.append(row);
-  if (!meta.search) wrap.append(el('small', '', 'Photo and price search is off. Add BRAVE_API_KEY on the server to turn it on.'));
+  if (meta.search.provider === 'commons' && !(ui.img && ui.img.open)) wrap.append(el('small', '', 'Photos come from Wikimedia Commons (free). Add BRAVE_API_KEY on the server for more shop photos and price suggestions.'));
   if (ui.img && ui.img.open) wrap.append(imageStrip(round, ui));
   return wrap;
 }
@@ -1305,8 +1305,8 @@ function priceField(round, updateHead, ui) {
   input.oninput = () => { round.price = input.value; consoleErr = ''; refreshFooter(); updateHead(); };
   const ask = el('button', 'btn ghost find-btn', 'Suggest');
   ask.type = 'button';
-  ask.disabled = !meta.search;
-  ask.title = meta.search ? 'Look up typical prices on the web' : 'Needs BRAVE_API_KEY on the server';
+  ask.disabled = !meta.search.prices;
+  ask.title = meta.search.prices ? 'Look up typical prices on the web' : 'Needs BRAVE_API_KEY on the server';
   ask.onclick = () => runPriceSuggest(round);
   row.append(input, ask);
   wrap.append(row);
@@ -1332,8 +1332,8 @@ function priceField(round, updateHead, ui) {
       }
       wrap.append(chips, el('small', '', 'From web results, so check them. Hover for the snippet. Or type your own price.'));
     }
-  } else if (meta.search) {
-    wrap.append(el('small', '', 'Use 0.85 for 85p, or 139 for £139.'));
+  } else {
+    wrap.append(el('small', '', meta.search.prices ? 'Use 0.85 for 85p, or 139 for £139.' : 'Type the price, e.g. 0.85 for 85p, or 139 for £139.'));
   }
   return wrap;
 }

@@ -404,7 +404,7 @@ function hostSettings(id) {
     setName: data.setName,
     activeSetId,
     sets: setList(),
-    search: webSearch.enabled,
+    search: { images: webSearch.images, prices: webSearch.prices, provider: webSearch.provider },
     showTitle: data.showTitle,
     showSubtitle: data.showSubtitle,
     tagline: data.tagline,

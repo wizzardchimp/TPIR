@@ -69,6 +69,7 @@ module.exports = function createWebSearch({ uploadsDir }) {
   const BASE = (process.env.BRAVE_API_BASE || 'https://api.search.brave.com').replace(/\/$/, '');
   const GAP = Number(process.env.BRAVE_MIN_GAP_MS) || 1100; // free plan: 1 request per second
   const ALLOW_PRIVATE = process.env.ALLOW_PRIVATE_FETCH === '1'; // tests only
+  const COMMONS = (process.env.COMMONS_API_BASE || 'https://commons.wikimedia.org').replace(/\/$/, '');
   const PAGE = 3;
   const okUrl = (u) => (ALLOW_PRIVATE ? /^https?:\/\//i : /^https:\/\//i).test(u || '');
 
@@ -103,13 +104,53 @@ module.exports = function createWebSearch({ uploadsDir }) {
     for (const [k, v] of tokens) if (now - v.at > 30 * 60 * 1000) tokens.delete(k);
   }
 
+  // Keyless fallback: openly licensed photos from Wikimedia Commons
+  async function commonsItems(q) {
+    const url = new URL(COMMONS + '/w/api.php');
+    const params = {
+      action: 'query', format: 'json', generator: 'search', gsrnamespace: 6, gsrlimit: 30,
+      gsrsearch: q + ' filetype:bitmap', prop: 'imageinfo', iiprop: 'url|mime|size|extmetadata',
+      iiurlwidth: 1000, iiextmetadatafilter: 'LicenseShortName|Artist',
+    };
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'TPIR-show/1.0 (party price guessing game)' },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) throw new Error('Photo search failed (' + res.status + ')');
+    const data = await res.json();
+    const pages = Object.values((data.query && data.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+    const items = [];
+    for (const pg of pages) {
+      const info = pg.imageinfo && pg.imageinfo[0];
+      if (!info || !/^image\/(jpeg|png|webp)$/.test(info.mime || '')) continue;
+      const img = info.thumburl || info.url;
+      if (!okUrl(img)) continue;
+      const meta = info.extmetadata || {};
+      const licence = stripHtml(meta.LicenseShortName && meta.LicenseShortName.value);
+      items.push({
+        thumb: img,
+        full: img,
+        title: String(pg.title || '').replace(/^File:/, '').replace(/\.[a-z]+$/i, '').replace(/_/g, ' ').slice(0, 100),
+        site: 'Wikimedia Commons' + (licence ? ' · ' + licence : ''),
+        pageUrl: info.descriptionurl || '',
+        w: info.thumbwidth || info.width || 0,
+        h: info.thumbheight || info.height || 0,
+      });
+    }
+    return items;
+  }
+
   async function imageSearch(query, page) {
-    if (!KEY) throw new Error('Photo search is not set up (add BRAVE_API_KEY on the server)');
     sweep();
     const q = String(query || '').trim().slice(0, 120);
     if (!q) throw new Error('Type something to search for');
     const key = q.toLowerCase();
     let entry = searchCache.get(key);
+    if (!entry && !KEY) {
+      entry = { at: Date.now(), items: await commonsItems(q) };
+      searchCache.set(key, entry);
+    }
     if (!entry) {
       const data = await brave('/res/v1/images/search', { q, count: 30, safesearch: 'strict', country: 'gb', search_lang: 'en' });
       const seen = new Set();
@@ -160,7 +201,7 @@ module.exports = function createWebSearch({ uploadsDir }) {
     const u = new URL(url);
     if (u.protocol !== 'https:' && !(ALLOW_PRIVATE && u.protocol === 'http:')) throw new Error('Only https images are allowed');
     await assertPublic(u.hostname.replace(/^\[|\]$/g, ''));
-    const res = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { Accept: 'image/*', 'User-Agent': 'Mozilla/5.0 (price-is-right-show)' } });
+    const res = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { Accept: 'image/*', 'User-Agent': /(^|\.)wikimedia\.org$/.test(u.hostname) ? 'TPIR-show/1.0 (party price guessing game)' : 'Mozilla/5.0 (price-is-right-show)' } });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       return download(new URL(res.headers.get('location'), u).toString(), hops + 1);
     }
@@ -220,7 +261,7 @@ module.exports = function createWebSearch({ uploadsDir }) {
     return { items: items.slice(0, 6), typical, found: items.length };
   }
 
-  return { enabled: Boolean(KEY), imageSearch, imageImport, priceSuggest };
+  return { images: true, prices: Boolean(KEY), provider: KEY ? 'brave' : 'commons', imageSearch, imageImport, priceSuggest };
 };
 module.exports.extractPrices = extractPrices;
 module.exports.isPrivateIp = isPrivateIp;
