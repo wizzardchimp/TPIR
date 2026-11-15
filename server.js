@@ -104,11 +104,14 @@ const IDLE_WIPE_MS = 3 * 60 * 60 * 1000;
 let cueSeq = 0;
 let cue = { seq: 0, name: '' };
 
+const CODE_BLOCK = new Set(['ASS', 'SEX', 'WTF', 'FUK', 'FUC', 'CUM', 'TIT', 'PEN', 'NZI', 'KKK', 'GAY', 'JEW', 'FAG', 'HIV', 'DIE', 'KYS']);
 function makeCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 4; i += 1) code += alphabet[crypto.randomInt(alphabet.length)];
-  return code;
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  for (;;) {
+    let code = '';
+    for (let i = 0; i < 3; i += 1) code += alphabet[crypto.randomInt(alphabet.length)];
+    if (!CODE_BLOCK.has(code)) return code;
+  }
 }
 
 function loadLive() {
@@ -181,7 +184,7 @@ function persistLive() {
 }
 
 loadLive();
-if (!sessionCode || Date.now() - lastActivity >= IDLE_WIPE_MS) {
+if (!/^[A-Z]{3}$/.test(sessionCode) || Date.now() - lastActivity >= IDLE_WIPE_MS) {
   sessionCode = makeCode();
   sessionStartedAt = Date.now();
   phase = 'title';
@@ -429,17 +432,22 @@ function lanIP() {
   return '';
 }
 
-function playUrl(req) {
-  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '') + '/play?code=' + sessionCode;
+function baseUrl(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
   const host = req.get('host') || `localhost:${PORT}`;
   if (/^(localhost|127\.0\.0\.1)(:|$)/.test(host)) {
     const ip = lanIP();
     if (ip) {
       const port = host.includes(':') ? host.split(':').pop() : String(PORT);
-      return `http://${ip}:${port}/play?code=${sessionCode}`;
+      return `http://${ip}:${port}`;
     }
   }
-  return `${req.protocol}://${host}/play?code=${sessionCode}`;
+  return `${req.protocol}://${host}`;
+}
+
+// Short link used in the QR code: https://host/ABC
+function joinUrl(req) {
+  return `${baseUrl(req)}/${sessionCode}`;
 }
 
 const app = express();
@@ -464,10 +472,13 @@ const upload = multer({
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.get('/play', (req, res) => res.sendFile(path.join(PUBLIC, 'play.html')));
 
-app.get('/join.json', (req, res) => res.json({ url: playUrl(req) }));
+app.get('/join.json', (req, res) => {
+  const base = baseUrl(req);
+  res.json({ url: joinUrl(req), host: base.replace(/^https?:\/\//, ''), code: sessionCode });
+});
 
 app.get('/qr.svg', async (req, res) => {
-  const svg = await QRCode.toString(playUrl(req), {
+  const svg = await QRCode.toString(joinUrl(req), {
     type: 'svg',
     margin: 1,
     color: { dark: '#1a0336', light: '#ffffff' },
@@ -484,6 +495,11 @@ app.get('/audio/:name', (req, res) => {
 
 app.use('/uploads', express.static(UPLOADS));
 app.use(express.static(PUBLIC));
+
+// Short join link: /ABC -> phone page with the code filled in
+app.get('/:code([A-Za-z]{3})', (req, res) => {
+  res.redirect(302, '/play?code=' + encodeURIComponent(req.params.code.toUpperCase()));
+});
 
 app.post('/api/upload', (req, res) => {
   if (!tokenOk(req.get('x-host-token'))) return res.status(401).json({ error: 'Host PIN required' });

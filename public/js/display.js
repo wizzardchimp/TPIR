@@ -6,11 +6,11 @@ let autoAuthSent = false;
 let booted = false;
 let lastSeq = 0;
 let shownPrice = false;
-let editorOpen = false;
 let seenTitleCount = null;
 let presented = false;
 let diamondPlayed = false;
 let podiumBurst = false;
+let podiumStage = 0; // 0 = winner pop-up, 1 = full board
 const recent = {};
 
 const intro = new Audio('/audio/intro.mp3');
@@ -198,6 +198,7 @@ function render() {
     }
   } else {
     podiumBurst = false;
+    podiumStage = 0;
     stopTitleFx();
   }
 
@@ -265,6 +266,7 @@ function beginShow() {
     document.getElementById('lobby-pop').classList.add('hidden');
     document.getElementById('qr-full').classList.add('hidden');
     document.getElementById('rules-pop').classList.remove('hidden');
+    paintDock();
   });
 }
 function startRoundAfterRules() {
@@ -279,6 +281,7 @@ function startRoundAfterRules() {
     mark('start');
     socket.emit('host:start', { token: hostToken });
     fadeIntroThenBed(state.startAudio || '');
+    paintDock();
   });
 }
 function paintRound() {
@@ -438,6 +441,22 @@ function toggleGuesses() {
   guessesOpen = !guessesOpen;
   paintGuessList();
 }
+function openRoundResult() {
+  const pop = document.getElementById('round-result');
+  if (!state || state.phase !== 'revealed' || !state.round || state.round.id !== resultFor) return;
+  clearTimeout(resultTimer);
+  pop.classList.remove('hidden');
+  document.getElementById('badge').classList.remove('hold');
+  scoreboardLocked = true;
+  if (fresh('scores')) playStinger('scores.mp3', 'scores');
+  paintRoundResult();
+  paintDock();
+}
+function showResultsNow() {
+  if (!state || state.phase !== 'revealed' || !state.round) return;
+  resultFor = state.round.id;
+  openRoundResult();
+}
 function paintRoundResult() {
   const pop = document.getElementById('round-result');
   const sheet = document.getElementById('result-sheet');
@@ -453,17 +472,11 @@ function paintRoundResult() {
   if (resultFor !== state.round.id) {
     resultFor = state.round.id;
     clearTimeout(resultTimer);
-    resultTimer = setTimeout(() => {
-      if (!state || state.phase !== 'revealed' || !state.round || state.round.id !== resultFor) return;
-      pop.classList.remove('hidden');
-      document.getElementById('badge').classList.remove('hold');
-      scoreboardLocked = true;
-      if (fresh('scores')) playStinger('scores.mp3', 'scores');
-      paintRoundResult();
-    }, 3000);
+    resultTimer = setTimeout(openRoundResult, 3000);
     return;
   }
   if (pop.classList.contains('hidden')) return;
+  paintDock();
   sheet.replaceChildren();
   const head = document.createElement('div');
   head.className = 'result-head';
@@ -495,7 +508,7 @@ function paintRoundResult() {
     name.textContent = won ? p.name + ' won' : p.name;
     const detail = document.createElement('strong');
     if (p.guessPence == null) detail.textContent = 'No bid';
-    else detail.textContent = TPIR.formatPrice(p.guessPence) + ' · ' + p.points + ' pts';
+    else detail.textContent = TPIR.formatPrice(p.guessPence) + ' · ' + p.points + (p.points === 1 ? ' pt' : ' pts');
     row.append(name, detail);
     sheet.append(row);
   });
@@ -507,57 +520,104 @@ function paintRoundResult() {
   sheet.append(cont);
   autoScroll(sheet);
 }
+function standings() {
+  const ranked = [...state.players].sort(compareStanding);
+  return ranked.map((p) => ({
+    p,
+    rank: 1 + ranked.filter((q) => q.played > 0 && q.total > p.total).length,
+  }));
+}
+function podiumWinners() {
+  const ranked = standings().filter((s) => s.p.played > 0);
+  if (!ranked.length) return [];
+  return ranked.filter((s) => s.rank === 1).map((s) => s.p);
+}
+function fitText(node, maxPx, minPx, boxWidth) {
+  const len = Math.max(1, node.textContent.length);
+  node.style.fontSize = Math.max(minPx, Math.min(maxPx, boxWidth / (len * 0.6))) + 'px';
+}
+function paintWinner() {
+  const winners = podiumWinners();
+  const name = document.getElementById('winner-name');
+  const score = document.getElementById('winner-score');
+  const others = document.getElementById('winner-others');
+  const kicker = document.getElementById('winner-kicker');
+  if (!winners.length) {
+    kicker.textContent = 'Game over';
+    name.textContent = 'No winner';
+    score.textContent = 'Nobody scored this time';
+    others.textContent = '';
+  } else {
+    kicker.textContent = winners.length > 1 ? 'Joint winners' : 'And the winner is';
+    name.textContent = winners.map((w) => w.name).join(' & ');
+    score.textContent = winners[0].total + (winners[0].total === 1 ? ' point' : ' points');
+    const rest = standings().filter((s) => s.rank > 1 && s.p.played > 0).slice(0, 2);
+    others.textContent = rest.map((s) => (s.rank === 2 ? '2nd ' : s.rank === 3 ? '3rd ' : s.rank + 'th ') + s.p.name + ' · ' + s.p.total).join('     ');
+  }
+  fitText(name, window.innerHeight * 0.2, 28, window.innerWidth * 0.82);
+}
+function fitBoard() {
+  const wrap = document.getElementById('grid-wrap');
+  const table = wrap.querySelector('table.board');
+  if (!table || !state) return;
+  const rows = Math.max(1, state.players.length);
+  const cols = state.rounds.length;
+  const names = state.players.reduce((m, p) => Math.max(m, p.name.length), 6);
+  const byHeight = (wrap.clientHeight - 24) / (rows + 1.9) / 2.25;
+  const byWidth = (wrap.clientWidth - 24) / (names * 0.62 + (cols + 1) * 3.6 + 5);
+  const size = Math.max(14, Math.min(46, byHeight, byWidth));
+  table.style.fontSize = size + 'px';
+}
 function paintPodium() {
+  document.getElementById('winner-stage').classList.toggle('hidden', podiumStage !== 0);
+  document.getElementById('board-stage').classList.toggle('hidden', podiumStage !== 1);
+  if (podiumStage === 0) {
+    paintWinner();
+    return;
+  }
+  const winners = podiumWinners();
+  document.getElementById('board-title').textContent = winners.length
+    ? winners.map((w) => w.name).join(' & ') + (winners.length > 1 ? ' win' : ' wins') + ' with ' + winners[0].total
+    : 'Final scores';
   const wrap = document.getElementById('grid-wrap');
   wrap.replaceChildren();
-  const table = document.createElement('table');
-  table.className = 'board';
+  const table = el('table', 'board');
+  const thead = document.createElement('thead');
   const head = document.createElement('tr');
-  const playerTh = document.createElement('th');
-  playerTh.textContent = 'Player';
-  head.append(playerTh);
+  head.append(el('th', 'rk', '#'), el('th', 'nm', 'Player'));
   for (const round of state.rounds) {
-    const th = document.createElement('th');
-    th.textContent = round.short || round.title;
-    if (round.pricePence != null) {
-      const small = document.createElement('small');
-      small.textContent = TPIR.formatPrice(round.pricePence);
-      th.append(small);
-    }
+    const th = el('th', 'rd', round.short || round.title);
+    if (round.pricePence != null) th.append(el('small', '', TPIR.formatPrice(round.pricePence)));
     head.append(th);
   }
-  const totalTh = document.createElement('th');
-  totalTh.textContent = 'Total';
-  head.append(totalTh);
-  const thead = document.createElement('thead');
+  head.append(el('th', 'tt', 'Total'));
   thead.append(head);
   const body = document.createElement('tbody');
-  const ranked = [...state.players].sort(compareStanding);
-  const best = ranked.find((p) => p.played > 0);
-  ranked.forEach((p) => {
+  for (const { p, rank } of standings()) {
     const tr = document.createElement('tr');
-    if (best && p.played > 0 && p.total === best.total) tr.className = 'winner';
-    const name = document.createElement('td');
-    name.textContent = p.name;
-    tr.append(name);
+    const played = p.played > 0;
+    if (played && rank === 1) tr.className = 'winner';
+    else if (played && rank <= 3) tr.className = 'podium-' + rank;
+    const rk = el('td', 'rk', played ? String(rank) : '–');
+    const nm = el('td', 'nm', p.name);
+    tr.append(rk, nm);
     (p.scores || []).forEach((score, i) => {
       if (i >= state.rounds.length) return;
-      const td = document.createElement('td');
-      td.textContent = score == null ? '—' : String(score);
+      const td = el('td', 'rd');
+      td.append(el('span', 'pt s' + (score == null ? 'x' : score), score == null ? '–' : String(score)));
       tr.append(td);
     });
-    const total = document.createElement('td');
-    total.textContent = p.played ? String(p.total) : '—';
-    tr.append(total);
+    tr.append(el('td', 'tt', played ? String(p.total) : '–'));
     body.append(tr);
-  });
+  }
   table.append(thead, body);
-  const note = document.createElement('p');
-  note.className = 'board-note';
-  note.textContent = '3 for closest, 2 for second, 1 for any other bid that does not go over. Highest score wins.';
-  wrap.append(table, note);
+  wrap.append(table);
+  fitBoard();
   autoScroll(wrap);
 }
+window.addEventListener('resize', () => {
+  if (state && state.phase === 'podium') { paintPodium(); }
+});
 const scrollers = new Set();
 function autoScroll(el) {
   if (!el || scrollers.has(el)) return;
@@ -621,15 +681,82 @@ function paintScores() {
   actions.append(close);
   sheet.append(actions);
 }
+function rulesOpen() {
+  return !document.getElementById('rules-pop').classList.contains('hidden');
+}
+function resultOpen() {
+  return !document.getElementById('round-result').classList.contains('hidden');
+}
+function lockBids() {
+  if (!state || state.phase !== 'guessing' || state.bidsIn) return;
+  mark('ding');
+  playStinger('dingding.mp3', 'ding');
+  socket.emit('host:lock', { token: hostToken });
+}
+function revealPrice() {
+  if (!state || state.phase !== 'guessing') return;
+  hideTimeUp();
+  if (state.round) timeUpRound = state.round.id;
+  mark('reveal');
+  playStinger('reveal.mp3', 'reveal');
+  socket.emit('host:reveal', { token: hostToken });
+}
+function revealBoard() {
+  podiumStage = 1;
+  burstConfetti();
+  paintPodium();
+  paintDock();
+}
+// The one "what happens next" action. Space, a clicker, or the big toolbar button all run this.
+function currentStep() {
+  if (!state || !presented || consoleOpen()) return null;
+  if (rulesOpen()) return { label: 'Start game', run: startRoundAfterRules };
+  const last = state.roundIndex + 1 >= state.roundCount;
+  if (state.phase === 'title') return state.roundCount ? { label: 'Start game', run: beginShow } : null;
+  if (state.phase === 'guessing') {
+    return state.bidsIn
+      ? { label: 'Reveal price', run: revealPrice }
+      : { label: 'Lock bids', run: lockBids };
+  }
+  if (state.phase === 'revealed') {
+    if (!resultOpen()) return { label: 'Show scores', run: showResultsNow };
+    return { label: last ? 'Final results' : 'Next round', run: continueRound };
+  }
+  if (state.phase === 'podium') {
+    return podiumStage === 0
+      ? { label: 'Reveal board', run: revealBoard }
+      : { label: 'New game', run: continueRound };
+  }
+  return null;
+}
+function advance() {
+  const step = currentStep();
+  if (step) step.run();
+  paintDock();
+}
 function paintDock() {
   const bar = document.getElementById('toolbar');
   bar.classList.toggle('hidden', !state || (state.phase === 'title' && !presented));
-  document.getElementById('dock-lock').disabled = state.phase !== 'guessing' || state.bidsIn;
-  document.getElementById('dock-reveal').disabled = state.phase !== 'guessing';
+  if (!state) return;
+  const step = currentStep();
   const next = document.getElementById('dock-next');
-  next.disabled = state.phase !== 'revealed' && state.phase !== 'podium';
-  if (state.phase === 'podium') next.textContent = 'Title';
-  else next.textContent = state.roundIndex + 1 >= state.roundCount ? 'Podium' : 'Next';
+  next.disabled = !step;
+  document.getElementById('dock-label').textContent = step ? step.label : 'Next';
+  const roundLine = document.getElementById('step-round');
+  const stateLine = document.getElementById('step-state');
+  const n = state.players.length;
+  const bids = state.players.filter((p) => p.submitted).length;
+  if (state.phase === 'title') {
+    roundLine.textContent = 'Lobby';
+    stateLine.textContent = n + (n === 1 ? ' player' : ' players');
+  } else if (state.phase === 'podium') {
+    roundLine.textContent = 'Final board';
+    stateLine.textContent = podiumStage === 0 ? 'Winner' : 'Scores';
+  } else {
+    roundLine.textContent = 'Round ' + (state.roundIndex + 1) + ' of ' + state.roundCount;
+    if (state.phase === 'guessing') stateLine.textContent = (state.bidsIn ? 'Bids locked' : 'Bids open') + ' · ' + bids + '/' + n + ' in';
+    else stateLine.textContent = 'Price revealed';
+  }
   const code = document.getElementById('session-code');
   if (state.sessionCode) code.textContent = state.sessionCode;
   const qr = '/qr.svg?code=' + (state.sessionCode || '');
@@ -637,27 +764,7 @@ function paintDock() {
     const img = document.getElementById(id);
     if (img && img.getAttribute('src') !== qr) img.src = qr;
   });
-}
-function paintPlayers() {
-  const el = document.getElementById('host-players');
-  if (!el || !state) return;
-  el.replaceChildren();
-  const label = document.createElement('p');
-  label.className = 'sub';
-  label.textContent = state.bidsIn && state.phase === 'guessing' ? 'Bids are in' : 'Players';
-  el.append(label);
-  for (const p of state.players) {
-    const row = document.createElement('div');
-    row.className = 'tick' + (p.submitted ? ' in' : '');
-    const name = document.createElement('span');
-    name.textContent = (p.submitted ? '✓ ' : '○ ') + p.name + (p.connected ? '' : ' (away)');
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.textContent = 'Remove';
-    rm.onclick = () => socket.emit('host:remove', { token: hostToken, id: p.id });
-    row.append(name, rm);
-    el.append(row);
-  }
+  if (joinInfo.code !== state.sessionCode) loadJoinInfo();
 }
 function openPin() {
   document.getElementById('pin-err').textContent = '';
@@ -694,181 +801,380 @@ function onCue(name) {
   if (name === 'round' && fresh('round') && state.round) goBed(state.round.audio);
   if (name === 'start' && fresh('start')) fadeIntroThenBed(state.startAudio || state.round?.audio || '');
 }
-function field(label, className, value) {
-  const wrap = document.createElement('label');
-  wrap.textContent = label;
-  const input = document.createElement('input');
-  input.className = className;
-  input.value = value || '';
-  wrap.append(input);
-  return wrap;
+// ===== Settings console =====
+let draft = null;          // working copy: { showTitle, showSubtitle, tagline, rounds: [...] }
+let savedSnapshot = '';
+let consoleTab = 'rounds';
+let openRoundId = '';
+let beds = [];
+let consoleErr = '';
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
 }
-function buildEditor(settings) {
-  editorOpen = true;
-  const sheet = document.getElementById('host-sheet');
-  sheet.replaceChildren();
-  const h = document.createElement('h3');
-  h.textContent = 'Host';
-  const err = document.createElement('p');
-  err.id = 'host-err';
-  err.className = 'err';
-  const fields = document.createElement('div');
-  fields.className = 'fields';
-  fields.append(
-    field('Show name', 'f-title-show', settings.showTitle),
-    field('Diamond text', 'f-sub', settings.showSubtitle),
-  );
-  const tagWrap = document.createElement('label');
-  tagWrap.textContent = 'Tagline';
-  const tag = document.createElement('input');
-  tag.className = 'f-tag';
-  tag.value = settings.tagline || '';
-  tagWrap.append(tag);
-  const list = document.createElement('div');
-  list.id = 'round-list';
-  const players = document.createElement('div');
-  players.id = 'host-players';
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'ghost';
-  add.textContent = 'Add round';
-  add.onclick = () => list.append(roundRow({ id: crypto.randomUUID(), title: '', source: '', pricePence: 0, image: '', audio: '' }, settings.beds));
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.textContent = 'Save rounds';
-  save.onclick = saveSettings;
-  const reset = document.createElement('button');
-  reset.type = 'button';
-  reset.className = 'ghost';
-  reset.textContent = 'Back to title';
-  reset.onclick = () => {
-    socket.emit('host:reset', { token: hostToken });
-    document.getElementById('host-pop').classList.add('hidden');
-  };
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'ghost';
-  close.textContent = 'Close';
-  close.onclick = () => {
-    editorOpen = false;
-    document.getElementById('host-pop').classList.add('hidden');
-  };
-  actions.append(add, save, reset, close);
-  sheet.append(h, fields, tagWrap, list, players, err, actions);
-  for (const round of settings.rounds) list.append(roundRow(round, settings.beds));
-  paintPlayers();
+function isDirty() {
+  return Boolean(draft) && JSON.stringify(draft) !== savedSnapshot;
 }
-function roundRow(round, beds) {
-  const row = document.createElement('div');
-  row.className = 'round-edit';
-  row.dataset.id = round.id;
-  row.dataset.image = round.image || '';
-  row.dataset.points = JSON.stringify(round.points || []);
-  row.dataset.short = round.short || '';
-  const pounds = (Number(round.pricePence) / 100).toFixed(2);
-  row.append(
-    field('Item', 'f-title', round.title),
-    field('Source', 'f-source', round.source),
-    field('Price £', 'f-price', pounds),
-  );
-  const audio = document.createElement('label');
-  audio.textContent = 'Music';
-  const select = document.createElement('select');
-  select.className = 'f-audio';
-  const none = document.createElement('option');
-  none.value = '';
-  none.textContent = 'None';
-  select.append(none);
-  for (const bedName of beds || []) {
-    const opt = document.createElement('option');
-    opt.value = bedName;
-    opt.textContent = bedName;
-    if (round.audio === bedName) opt.selected = true;
-    select.append(opt);
+function consoleOpen() {
+  return !document.getElementById('host-pop').classList.contains('hidden');
+}
+function loadDraft(settings) {
+  beds = settings.beds || [];
+  draft = {
+    showTitle: settings.showTitle || '',
+    showSubtitle: settings.showSubtitle || '',
+    tagline: settings.tagline || '',
+    rounds: (settings.rounds || []).map((r) => ({
+      id: r.id,
+      title: r.title || '',
+      short: r.short || '',
+      source: r.source || '',
+      points: r.points || [],
+      price: (Number(r.pricePence) / 100).toFixed(2),
+      image: r.image || '',
+      audio: r.audio || '',
+    })),
+  };
+  savedSnapshot = JSON.stringify(draft);
+  if (!draft.rounds.some((r) => r.id === openRoundId)) openRoundId = '';
+}
+function openConsole() {
+  consoleErr = '';
+  document.getElementById('host-pop').classList.remove('hidden');
+  if (draft) renderConsole();
+  socket.emit('host:settings', { token: hostToken });
+}
+function closeConsole(force) {
+  if (!force && isDirty() && !confirm('You have unsaved changes. Close without saving?')) return;
+  if (isDirty()) {
+    draft = JSON.parse(savedSnapshot);
   }
-  audio.append(select);
-  const tools = document.createElement('div');
-  tools.className = 'row-actions';
-  const img = document.createElement('img');
-  img.className = 'preview-img';
-  img.alt = '';
-  if (round.image) img.src = round.image;
-  const file = document.createElement('input');
-  file.type = 'file';
-  file.accept = 'image/*';
-  file.onchange = async () => {
-    if (!file.files[0]) return;
-    const body = new FormData();
-    body.append('image', file.files[0]);
-    const res = await fetch('/api/upload', { method: 'POST', headers: { 'x-host-token': hostToken }, body });
-    const data = await res.json();
-    if (!res.ok) {
-      document.getElementById('host-err').textContent = data.error || 'Upload failed';
-      return;
-    }
-    row.dataset.image = data.url;
-    img.src = data.url;
-  };
-  const up = document.createElement('button');
-  up.type = 'button';
-  up.className = 'ghost';
-  up.textContent = 'Up';
-  up.onclick = () => {
-    const prev = row.previousElementSibling;
-    if (prev) row.parentNode.insertBefore(row, prev);
-  };
-  const down = document.createElement('button');
-  down.type = 'button';
-  down.className = 'ghost';
-  down.textContent = 'Down';
-  down.onclick = () => {
-    const next = row.nextElementSibling;
-    if (next) row.parentNode.insertBefore(next, row);
-  };
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'text-btn';
-  del.textContent = 'Delete';
-  del.onclick = () => row.remove();
-  tools.append(img, up, down, del);
-  const fileLabel = document.createElement('label');
-  fileLabel.textContent = 'Photo';
-  fileLabel.append(file);
-  row.append(audio, fileLabel, tools);
-  return row;
+  document.getElementById('host-pop').classList.add('hidden');
 }
-function saveSettings() {
-  const rounds = [...document.querySelectorAll('.round-edit')].map((row) => ({
-    id: row.dataset.id,
-    title: row.querySelector('.f-title').value,
-    source: row.querySelector('.f-source').value,
-    pricePence: TPIR.parsePrice(row.querySelector('.f-price').value, 'gbp'),
-    points: JSON.parse(row.dataset.points || '[]'),
-    short: row.dataset.short || '',
-    image: row.dataset.image || '',
-    audio: row.querySelector('.f-audio').value,
-  }));
-  if (rounds.some((round) => round.pricePence == null)) {
-    document.getElementById('host-err').textContent = 'Check the prices. Use 0.85 for 85p.';
+function priceOk(value) {
+  return TPIR.parsePrice(value, 'gbp') != null;
+}
+function saveConsole() {
+  const bad = draft.rounds.findIndex((r) => !r.title.trim() || !priceOk(r.price));
+  if (bad >= 0) {
+    openRoundId = draft.rounds[bad].id;
+    consoleTab = 'rounds';
+    consoleErr = !draft.rounds[bad].title.trim()
+      ? `Round ${bad + 1} needs a name.`
+      : `Round ${bad + 1}: check the price (e.g. 0.85 for 85p, 139 for £139).`;
+    renderConsole();
     return;
   }
+  if (!draft.rounds.length) {
+    consoleErr = 'Add at least one round.';
+    renderConsole();
+    return;
+  }
+  consoleErr = '';
   socket.emit('host:save', {
     token: hostToken,
     settings: {
-      showTitle: document.querySelector('.f-title-show').value,
-      showSubtitle: document.querySelector('.f-sub').value,
-      tagline: document.querySelector('.f-tag').value,
-      rounds,
+      showTitle: draft.showTitle,
+      showSubtitle: draft.showSubtitle,
+      tagline: draft.tagline,
+      rounds: draft.rounds.map((r) => ({
+        id: r.id,
+        title: r.title,
+        short: r.short,
+        source: r.source,
+        points: r.points,
+        pricePence: TPIR.parsePrice(r.price, 'gbp'),
+        image: r.image,
+        audio: r.audio,
+      })),
     },
   });
 }
-function openHost() {
-  ensureHost(() => {
-    document.getElementById('host-pop').classList.remove('hidden');
-    socket.emit('host:settings', { token: hostToken });
-  });
+function refreshFooter() {
+  const status = document.getElementById('console-status');
+  const save = document.getElementById('console-save');
+  const discard = document.getElementById('console-discard');
+  if (!status) return;
+  const dirty = isDirty();
+  status.textContent = consoleErr || (dirty ? 'Unsaved changes' : 'All changes saved');
+  status.className = 'console-status' + (consoleErr ? ' bad' : dirty ? ' dirty' : '');
+  save.disabled = !dirty;
+  discard.disabled = !dirty;
+}
+function renderConsole() {
+  const box = document.getElementById('console');
+  const scroll = box.querySelector('.console-body');
+  const keep = scroll ? scroll.scrollTop : 0;
+  box.replaceChildren();
+
+  const head = el('div', 'console-head');
+  head.append(el('h2', '', 'Settings'));
+  const x = el('button', 'console-x', '✕');
+  x.type = 'button';
+  x.setAttribute('aria-label', 'Close');
+  x.onclick = () => closeConsole(false);
+  head.append(x);
+
+  const tabs = el('div', 'console-tabs');
+  const defs = [['rounds', 'Rounds'], ['show', 'Show'], ['players', 'Players'], ['session', 'Session']];
+  for (const [key, label] of defs) {
+    const b = el('button', 'console-tab' + (consoleTab === key ? ' on' : ''), label);
+    b.type = 'button';
+    if (key === 'rounds' && draft) b.append(el('em', '', String(draft.rounds.length)));
+    if (key === 'players' && state) b.append(el('em', '', String(state.players.length)));
+    b.onclick = () => { consoleTab = key; renderConsole(); };
+    tabs.append(b);
+  }
+
+  const body = el('div', 'console-body');
+  if (!draft) body.append(el('p', 'sub', 'Loading…'));
+  else if (consoleTab === 'rounds') body.append(roundsPanel());
+  else if (consoleTab === 'show') body.append(showPanel());
+  else if (consoleTab === 'players') body.append(playersPanel());
+  else body.append(sessionPanel());
+
+  const foot = el('div', 'console-foot');
+  const status = el('span', 'console-status');
+  status.id = 'console-status';
+  const discard = el('button', 'btn ghost', 'Discard');
+  discard.id = 'console-discard';
+  discard.type = 'button';
+  discard.onclick = () => { draft = JSON.parse(savedSnapshot); consoleErr = ''; renderConsole(); };
+  const save = el('button', 'btn primary', 'Save changes');
+  save.id = 'console-save';
+  save.type = 'button';
+  save.onclick = saveConsole;
+  foot.append(status, discard, save);
+
+  box.append(head, tabs, body, foot);
+  body.scrollTop = keep;
+  refreshFooter();
+}
+function inputField(label, value, onInput, opts) {
+  const wrap = el('label', 'cf' + (opts && opts.wide ? ' wide' : '') + (opts && opts.third ? ' third' : ''));
+  wrap.append(el('span', '', label));
+  const input = document.createElement(opts && opts.area ? 'textarea' : 'input');
+  if (opts && opts.area) input.rows = opts.rows || 3;
+  if (opts && opts.max) input.maxLength = opts.max;
+  if (opts && opts.placeholder) input.placeholder = opts.placeholder;
+  if (opts && opts.inputmode) input.inputMode = opts.inputmode;
+  input.value = value;
+  input.oninput = () => { onInput(input.value); consoleErr = ''; refreshFooter(); if (opts && opts.live) opts.live(); };
+  wrap.append(input);
+  if (opts && opts.hint) wrap.append(el('small', '', opts.hint));
+  return wrap;
+}
+function showPanel() {
+  const panel = el('div', 'panel');
+  panel.append(el('p', 'sub', 'What appears on the title screen.'));
+  const grid = el('div', 'cgrid');
+  grid.append(
+    inputField('Show name', draft.showTitle, (v) => { draft.showTitle = v; }, { max: 32 }),
+    inputField('Diamond text', draft.showSubtitle, (v) => { draft.showSubtitle = v; }, { max: 32, hint: 'One word per line on the diamond.' }),
+    inputField('Tagline', draft.tagline, (v) => { draft.tagline = v; }, { max: 140, wide: true }),
+  );
+  panel.append(grid);
+  return panel;
+}
+function roundsPanel() {
+  const panel = el('div', 'panel');
+  panel.append(el('p', 'sub', 'Played in this order. Click a round to edit it.'));
+  const list = el('div', 'rcards');
+  draft.rounds.forEach((round, i) => list.append(roundCard(round, i)));
+  panel.append(list);
+  const add = el('button', 'btn ghost add-round', '+ Add round');
+  add.type = 'button';
+  add.onclick = () => {
+    const id = crypto.randomUUID();
+    draft.rounds.push({ id, title: '', short: '', source: '', points: [], price: '', image: '', audio: beds[0] || '' });
+    openRoundId = id;
+    renderConsole();
+    const body = document.querySelector('.console-body');
+    if (body) body.scrollTop = body.scrollHeight;
+  };
+  panel.append(add);
+  return panel;
+}
+function roundCard(round, index) {
+  const open = openRoundId === round.id;
+  const card = el('div', 'rcard' + (open ? ' open' : ''));
+  const bad = !round.title.trim() || (round.price !== '' && !priceOk(round.price));
+  if (bad && open) card.classList.add('bad');
+
+  const head = el('div', 'rhead');
+  head.append(el('span', 'rnum', String(index + 1)));
+  const thumb = el('span', 'rthumb' + (round.image ? '' : ' none'));
+  if (round.image) {
+    const img = document.createElement('img');
+    img.src = round.image;
+    img.alt = '';
+    thumb.append(img);
+  } else thumb.textContent = '＋';
+  head.append(thumb);
+  const main = el('button', 'rmain');
+  main.type = 'button';
+  main.append(el('strong', '', round.title.trim() || 'Untitled round'));
+  const priceN = TPIR.parsePrice(round.price, 'gbp');
+  main.append(el('span', '', priceN == null ? 'No price yet' : TPIR.formatPrice(priceN)));
+  main.onclick = () => { openRoundId = open ? '' : round.id; renderConsole(); };
+  head.append(main);
+
+  const tools = el('div', 'rtools');
+  const mk = (label, title, fn, disabled) => {
+    const b = el('button', 'icon-btn', label);
+    b.type = 'button';
+    b.title = title;
+    b.disabled = Boolean(disabled);
+    b.onclick = (e) => { e.stopPropagation(); fn(); };
+    return b;
+  };
+  tools.append(
+    mk('↑', 'Move up', () => { [draft.rounds[index - 1], draft.rounds[index]] = [draft.rounds[index], draft.rounds[index - 1]]; renderConsole(); }, index === 0),
+    mk('↓', 'Move down', () => { [draft.rounds[index + 1], draft.rounds[index]] = [draft.rounds[index], draft.rounds[index + 1]]; renderConsole(); }, index === draft.rounds.length - 1),
+    mk('⧉', 'Duplicate', () => { const copy = { ...round, id: crypto.randomUUID(), points: [...round.points] }; draft.rounds.splice(index + 1, 0, copy); openRoundId = copy.id; renderConsole(); }),
+    mk('✕', 'Delete', () => {
+      if (!confirm('Delete "' + (round.title.trim() || 'this round') + '"?')) return;
+      draft.rounds.splice(index, 1);
+      renderConsole();
+    }),
+  );
+  head.append(tools);
+  card.append(head);
+  if (!open) return card;
+
+  const body = el('div', 'rbody');
+  const fields = el('div', 'cgrid');
+  const updateHead = () => {
+    main.firstChild.textContent = round.title.trim() || 'Untitled round';
+    const p = TPIR.parsePrice(round.price, 'gbp');
+    main.lastChild.textContent = p == null ? 'No price yet' : TPIR.formatPrice(p);
+  };
+  fields.append(
+    inputField('Item / question', round.title, (v) => { round.title = v; }, { max: 160, wide: true, live: updateHead, placeholder: 'How much is a tin of beans?' }),
+    inputField('Price (£)', round.price, (v) => { round.price = v; }, { third: true, inputmode: 'decimal', live: updateHead, placeholder: '0.85', hint: 'Use 0.85 for 85p, or 139 for £139.' }),
+    inputField('Source', round.source, (v) => { round.source = v; }, { third: true, max: 80, placeholder: 'ASDA' }),
+    inputField('Board label', round.short, (v) => { round.short = v; }, { third: true, max: 24, placeholder: 'Beans', hint: 'Short name for the final board.' }),
+    inputField('Details (one per line)', round.points.join('\n'), (v) => { round.points = v.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8); }, { area: true, rows: 3, wide: true, placeholder: '1 x Sausage Roll' }),
+  );
+  const music = el('label', 'cf');
+  music.append(el('span', '', 'Music'));
+  const select = document.createElement('select');
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = 'No music';
+  select.append(none);
+  for (const name of beds) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.append(opt);
+  }
+  select.value = round.audio || '';
+  select.onchange = () => { round.audio = select.value; refreshFooter(); };
+  music.append(select);
+  fields.append(music);
+
+  const photo = el('div', 'cf photo');
+  photo.append(el('span', '', 'Photo'));
+  const row = el('div', 'photo-row');
+  const preview = el('span', 'pthumb' + (round.image ? '' : ' none'));
+  if (round.image) {
+    const img = document.createElement('img');
+    img.src = round.image;
+    img.alt = '';
+    preview.append(img);
+  } else preview.textContent = 'No photo';
+  const file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/*';
+  file.hidden = true;
+  const pick = el('button', 'btn ghost sm', round.image ? 'Replace' : 'Upload');
+  pick.type = 'button';
+  pick.onclick = () => file.click();
+  file.onchange = async () => {
+    if (!file.files[0]) return;
+    pick.disabled = true;
+    pick.textContent = 'Uploading…';
+    try {
+      const body = new FormData();
+      body.append('image', file.files[0]);
+      const res = await fetch('/api/upload', { method: 'POST', headers: { 'x-host-token': hostToken }, body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      round.image = data.url;
+      consoleErr = '';
+      renderConsole();
+    } catch (err) {
+      consoleErr = err.message;
+      renderConsole();
+    }
+  };
+  row.append(preview, pick, file);
+  if (round.image) {
+    const rm = el('button', 'btn ghost sm', 'Remove');
+    rm.type = 'button';
+    rm.onclick = () => { round.image = ''; renderConsole(); };
+    row.append(rm);
+  }
+  photo.append(row);
+  fields.append(photo);
+  body.append(fields);
+  card.append(body);
+  return card;
+}
+function playersPanel() {
+  const panel = el('div', 'panel');
+  panel.id = 'host-players';
+  paintPlayersInto(panel);
+  return panel;
+}
+function paintPlayersInto(box) {
+  box.replaceChildren();
+  const players = (state && state.players) || [];
+  box.append(el('p', 'sub', players.length ? 'Everyone who has joined this show.' : 'Nobody has joined yet.'));
+  for (const p of players) {
+    const row = el('div', 'tick' + (p.submitted ? ' in' : ''));
+    row.append(el('span', '', (p.submitted ? '✓ ' : '') + p.name + (p.connected ? '' : ' (away)')));
+    const rm = el('button', 'text-btn', 'Remove');
+    rm.type = 'button';
+    rm.onclick = () => { if (confirm('Remove ' + p.name + '?')) socket.emit('host:remove', { token: hostToken, id: p.id }); };
+    row.append(rm);
+    box.append(row);
+  }
+}
+function paintPlayers() {
+  const box = document.getElementById('host-players');
+  if (box && state) paintPlayersInto(box);
+  const tab = document.querySelector('.console-tab:nth-child(3) em');
+  if (tab && state) tab.textContent = String(state.players.length);
+}
+function sessionPanel() {
+  const panel = el('div', 'panel');
+  const info = el('div', 'join-info compact');
+  info.append(el('p', 'join-label', 'Players join at'), el('p', 'join-host', joinInfo.host || ''), el('p', 'join-label', 'Room code'), el('p', 'join-code-big', joinInfo.code || ''));
+  panel.append(info);
+  const actions = el('div', 'session-actions');
+  const back = el('button', 'btn ghost', 'Back to title screen');
+  back.type = 'button';
+  back.title = 'Keeps players and the room code, clears all bids';
+  back.onclick = () => {
+    if (!confirm('Go back to the title screen? All bids and scores will be cleared. Players stay connected.')) return;
+    socket.emit('host:reset', { token: hostToken });
+    closeConsole(true);
+  };
+  const fresh = el('button', 'btn danger', 'New session (new room code)');
+  fresh.type = 'button';
+  fresh.onclick = () => {
+    if (!confirm('Disconnect every player and start a new session with a new room code?')) return;
+    socket.emit('host:refresh', { token: hostToken });
+    setTimeout(() => location.reload(), 200);
+  };
+  actions.append(back, fresh);
+  panel.append(actions);
+  return panel;
 }
 
 const fxColors = ['#ff4db8', '#ffb15a', '#fff6c8', '#7a5cff', '#6ec8ff', '#ffffff', '#ea8736'];
@@ -1116,17 +1422,7 @@ document.getElementById('lobby-qr-btn').onclick = (e) => e.stopPropagation();
 document.getElementById('qr-full').onclick = (e) => {
   if (e.target.id === 'qr-full') document.getElementById('qr-full').classList.add('hidden');
 };
-document.getElementById('dock-lock').onclick = () => {
-  mark('ding');
-  playStinger('dingding.mp3', 'ding');
-  socket.emit('host:lock', { token: hostToken });
-};
-document.getElementById('dock-reveal').onclick = () => {
-  mark('reveal');
-  playStinger('reveal.mp3', 'reveal');
-  socket.emit('host:reveal', { token: hostToken });
-};
-document.getElementById('dock-next').onclick = continueRound;
+document.getElementById('dock-next').onclick = advance;
 document.getElementById('time-up-min').onclick = () => {
   hideTimeUp();
   if (state && state.round) timeUpRound = state.round.id;
@@ -1141,13 +1437,8 @@ document.getElementById('volume').oninput = (e) => {
   setGain(curtainMusic, curtainMusic._gain == null ? 0.85 : curtainMusic._gain);
   liveStingers.forEach((audio) => setGain(audio, audio._gain == null ? 1 : audio._gain));
 };
-document.getElementById('refresh-btn').onclick = () => {
-  if (!confirm('Clear every player and refresh the dashboard?')) return;
-  socket.emit('host:refresh', { token: hostToken });
-  setTimeout(() => location.reload(), 200);
-};
 document.getElementById('score-btn').onclick = toggleGuesses;
-document.getElementById('host-btn').onclick = openHost;
+document.getElementById('host-btn').onclick = openConsole;
 document.getElementById('pin-form').onsubmit = (e) => {
   e.preventDefault();
   socket.emit('host:auth', { pin: document.getElementById('pin').value });
@@ -1167,8 +1458,15 @@ function toggleFullscreen() {
   const enter = el.requestFullscreen || el.webkitRequestFullscreen;
   if (enter) enter.call(el);
 }
+// Keys a presentation clicker usually sends
+const ADVANCE_KEYS = new Set([' ', 'Spacebar', 'ArrowRight', 'PageDown', '.']);
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, textarea, select')) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (consoleOpen()) {
+    if (e.key === 'Escape') closeConsole(false);
+    return;
+  }
   if (e.key === 'f' || e.key === 'F') {
     e.preventDefault();
     toggleFullscreen();
@@ -1176,38 +1474,38 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     document.getElementById('score-pop').classList.add('hidden');
-    document.getElementById('host-pop').classList.add('hidden');
     document.getElementById('pin-pop').classList.add('hidden');
     document.getElementById('qr-full').classList.add('hidden');
     document.getElementById('lobby-pop').classList.add('hidden');
-    editorOpen = false;
+    return;
   }
   if (!state) return;
-  if (e.key === 'l' && state.phase === 'guessing' && !state.bidsIn) document.getElementById('dock-lock').click();
-  if (e.key === 'r' && state.phase === 'guessing') document.getElementById('dock-reveal').click();
-  if (e.key === 'n') document.getElementById('dock-next').click();
-  if (e.key === 's') toggleGuesses();
-  if (e.key === 'q' || e.key === 'Q') toggleLobby();
-  if (e.key === ' ' || e.key === 'Spacebar') {
-    const result = document.getElementById('round-result');
-    const pop = document.getElementById('lobby-pop');
-    const full = document.getElementById('qr-full');
-    if (!result.classList.contains('hidden')) {
-      e.preventDefault();
-      continueRound();
-    } else if (!pop.classList.contains('hidden') || !full.classList.contains('hidden')) {
-      e.preventDefault();
-      beginShow();
-    } else if (!document.getElementById('rules-pop').classList.contains('hidden')) {
-      e.preventDefault();
-      startRoundAfterRules();
-    }
+  if (ADVANCE_KEYS.has(e.key)) {
+    e.preventDefault();
+    if (e.repeat) return;
+    // QR / lobby overlays count as "start the game" on the title screen
+    advance();
+    return;
   }
+  if (e.key === 's' || e.key === 'S') toggleGuesses();
+  if (e.key === 'q' || e.key === 'Q') toggleLobby();
+});
+// Buttons should never keep focus, otherwise Space would also "click" them
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b && !b.closest('#console')) b.blur();
 });
 
-fetch('/join.json').then((res) => res.json()).then((data) => {
-  document.getElementById('join-url').textContent = data.url;
-}).catch(() => {});
+let joinInfo = { host: '', code: '', url: '' };
+function loadJoinInfo() {
+  fetch('/join.json').then((res) => res.json()).then((data) => {
+    joinInfo = data;
+    ['join-host', 'lobby-host'].forEach((id) => { const n = document.getElementById(id); if (n) n.textContent = data.host; });
+    ['join-code-big', 'lobby-code'].forEach((id) => { const n = document.getElementById(id); if (n) n.textContent = data.code; });
+    if (consoleOpen() && consoleTab === 'session') renderConsole();
+  }).catch(() => {});
+}
+loadJoinInfo();
 
 socket.on('state', (next) => {
   const seq = next.cue?.seq || 0;
@@ -1253,16 +1551,20 @@ socket.on('host:no', () => {
   openPin();
 });
 socket.on('host:settings', (settings) => {
-  if (!editorOpen) buildEditor(settings);
-  else if (!document.getElementById('round-list')) buildEditor(settings);
+  if (draft && isDirty() && consoleOpen()) return; // never overwrite edits in progress
+  loadDraft(settings);
+  if (consoleOpen()) renderConsole();
 });
 socket.on('host:saved', () => {
-  const err = document.getElementById('host-err');
-  if (err) err.textContent = 'Saved';
+  savedSnapshot = JSON.stringify(draft);
+  consoleErr = '';
+  refreshFooter();
+  const status = document.getElementById('console-status');
+  if (status) { status.textContent = 'Saved'; status.className = 'console-status ok'; }
 });
 socket.on('host:err', (message) => {
-  const err = document.getElementById('host-err');
-  if (err) err.textContent = message;
+  consoleErr = message;
+  refreshFooter();
 });
 intro.addEventListener('ended', () => {
   if (state?.phase === 'title') {

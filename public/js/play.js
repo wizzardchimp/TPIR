@@ -248,14 +248,20 @@ function fillStatus() {
     status.append(note);
   }
 }
-const joinCode = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
+let joinCode = (new URLSearchParams(location.search).get('code') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+if (!joinCode) document.getElementById('code-field').classList.remove('hidden');
 function join(name) {
+  const typed = document.getElementById('code').value.toUpperCase().replace(/[^A-Z]/g, '');
+  if (!joinCode && typed.length === 3) joinCode = typed;
   if (!joinCode) {
-    document.getElementById('join-err').textContent = 'Scan the code on the screen';
+    document.getElementById('join-err').textContent = 'Enter the 3-letter room code from the screen';
     return;
   }
   socket.emit('player:join', { token, name, code: joinCode });
 }
+document.getElementById('code').addEventListener('input', (e) => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+});
 
 document.getElementById('join-form').onsubmit = (e) => {
   e.preventDefault();
@@ -274,7 +280,7 @@ guessForm.onsubmit = (e) => {
 socket.on('connect', () => {
   document.getElementById('offline').classList.add('hidden');
   const saved = localStorage.getItem('tpirName');
-  if (saved) join(saved);
+  if (saved && joinCode) join(saved);
 });
 socket.on('disconnect', () => document.getElementById('offline').classList.remove('hidden'));
 socket.on('joined', ({ name }) => {

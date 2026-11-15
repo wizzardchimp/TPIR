@@ -94,37 +94,67 @@
   <section id="screen-podium" class="screen">
     <canvas id="podium-fx" aria-hidden="true"></canvas>
     <div class="sparkles" id="podium-sparkles" aria-hidden="true"></div>
-    <div class="podium-head">
-      <p class="kicker">Final board</p>
-      <h2>Highest score wins</h2>
+
+    <div id="winner-stage" class="winner-stage">
+      <div class="rays" aria-hidden="true"></div>
+      <div class="winner-card">
+        <p class="kicker" id="winner-kicker">And the winner is</p>
+        <svg class="crown" viewBox="0 0 120 84" aria-hidden="true">
+          <path d="M8 74 L0 14 L34 40 L60 4 L86 40 L120 14 L112 74 Z" fill="#f0d78c" stroke="#ea8736" stroke-width="5" stroke-linejoin="round"/>
+          <circle cx="0" cy="14" r="7" fill="#ff4db8"/><circle cx="60" cy="4" r="7" fill="#ff4db8"/><circle cx="120" cy="14" r="7" fill="#ff4db8"/>
+        </svg>
+        <h2 id="winner-name" class="winner-name"></h2>
+        <p id="winner-score" class="winner-score"></p>
+        <p id="winner-others" class="winner-others"></p>
+      </div>
     </div>
-    <div class="grid-wrap" id="grid-wrap"></div>
+
+    <div id="board-stage" class="board-stage hidden">
+      <div class="podium-head">
+        <p class="kicker">Final board</p>
+        <h2 id="board-title">Highest score wins</h2>
+      </div>
+      <div class="grid-wrap" id="grid-wrap"></div>
+    </div>
   </section>
 
   </div>
   <div id="timer-bar" class="timer-bar hidden" aria-hidden="true"><span id="timer-fill"></span></div>
   <div id="toolbar" class="toolbar hidden">
-    <button type="button" id="qr-icon" class="tool-qr" aria-label="Show lobby">
+    <button type="button" id="qr-icon" class="tool-join" aria-label="Show join code">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm10 0h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v4h-2v-4z"/></svg>
+      <span id="session-code" class="session-id">---</span>
       <span id="qr-badge" class="hidden">0</span>
     </button>
-    <button type="button" id="dock-lock">Lock</button>
-    <button type="button" id="dock-reveal">Reveal</button>
-    <button type="button" id="dock-next">Next</button>
-    <button type="button" id="score-btn">Guesses</button>
-    <button type="button" id="host-btn">Host</button>
-    <button type="button" id="refresh-btn">Refresh</button>
-    <label class="vol">Vol
-      <input id="volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
-    </label>
-    <span id="session-code" class="session-id">----</span>
+    <div class="tool-status" aria-live="polite">
+      <span id="step-round" class="step-round"></span>
+      <span id="step-state" class="step-state"></span>
+    </div>
+    <button type="button" id="score-btn" class="tool-ghost" title="Show guesses (S)">Guesses</button>
+    <button type="button" id="dock-next" class="tool-primary" title="Space, click or clicker">
+      <span id="dock-label">Next</span><kbd>Space</kbd>
+    </button>
+    <div class="tool-right">
+      <label class="vol" title="Volume">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+        <input id="volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
+      </label>
+      <button type="button" id="host-btn" class="tool-icon" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+      </button>
+    </div>
   </div>
 
   <div id="qr-full" class="qr-full hidden">
     <button type="button" class="qr-shot" id="qr-shot" aria-label="Hide QR code">
       <img id="qr" src="/qr.svg" alt="">
     </button>
-    <p id="join-url"></p>
+    <div class="join-info">
+      <p class="join-label">Join at</p>
+      <p class="join-host" id="join-host"></p>
+      <p class="join-label">Room code</p>
+      <p class="join-code-big" id="join-code-big"></p>
+    </div>
   </div>
   <div id="lobby-pop" class="overlay hidden">
     <div class="sheet lobby-sheet">
@@ -134,7 +164,14 @@
         <button type="button" class="qr-shot" id="lobby-qr-btn" aria-label="Hide QR code">
           <img id="lobby-qr" src="/qr.svg" alt="">
         </button>
-        <div id="lobby-players"></div>
+        <div class="lobby-right">
+          <div class="join-info compact">
+            <p class="join-label">Join at <strong id="lobby-host"></strong></p>
+            <p class="join-label">Room code</p>
+            <p class="join-code-big" id="lobby-code"></p>
+          </div>
+          <div id="lobby-players"></div>
+        </div>
       </div>
       <button type="button" id="lobby-start" class="lobby-start">Start round 1</button>
     </div>
@@ -160,8 +197,8 @@
   <div id="score-pop" class="overlay hidden">
     <div class="sheet" id="score-sheet"></div>
   </div>
-  <div id="host-pop" class="overlay hidden">
-    <div class="sheet host-sheet" id="host-sheet"></div>
+  <div id="host-pop" class="overlay console-overlay hidden">
+    <div class="console" id="console" role="dialog" aria-label="Settings"></div>
   </div>
   <div id="pin-pop" class="overlay hidden">
     <form class="sheet pin-sheet" id="pin-form">
