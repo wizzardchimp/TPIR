@@ -821,6 +821,23 @@ function el(tag, className, text) {
 function isDirty() {
   return Boolean(draft) && JSON.stringify(draft) !== savedSnapshot;
 }
+// Clicking into a box selects what is there, so typing replaces it
+(function () {
+  const box = document.getElementById('console');
+  box.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (t.matches('input:not([type=file]):not([type=range]):not([type=checkbox]), textarea')) {
+      t.select();
+      t._fresh = true;
+    }
+  });
+  box.addEventListener('mouseup', (e) => {
+    if (e.target._fresh) {
+      e.target._fresh = false;
+      e.preventDefault();
+    }
+  });
+})();
 function consoleOpen() {
   return !document.getElementById('host-pop').classList.contains('hidden');
 }
@@ -988,6 +1005,55 @@ function renderConsole() {
   body.scrollTop = keep;
   refreshFooter();
 }
+// Board label follows the title until the host types their own
+function deriveShort(title) {
+  return String(title || '').trim().slice(0, 24).trim();
+}
+function roundPreview(round) {
+  const wrap = el('div', 'pv');
+  wrap.append(el('p', 'pv-cap', 'Live preview · how it looks on the big screen'));
+  const frame = el('div', 'pv-frame');
+  const stage = el('div', 'pv-stage');
+  const stripe = el('div', 'pv-stripe');
+  const copy = el('div', 'pv-copy');
+  const title = el('h3', 'pv-title');
+  const points = el('ul', 'pv-points');
+  const source = el('p', 'pv-source');
+  copy.append(title, points, source);
+  const hex = el('div', 'pv-hex');
+  const img = document.createElement('img');
+  img.alt = '';
+  const none = el('span', 'pv-none', 'Add a photo');
+  hex.append(img, none);
+  stage.append(stripe, copy, hex);
+  frame.append(stage);
+  const foot = el('p', 'pv-foot');
+  wrap.append(frame, foot);
+  const fit = () => { stage.style.transform = 'scale(' + (frame.clientWidth / 1280) + ')'; };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(frame);
+  requestAnimationFrame(fit);
+  function update() {
+    const t = round.title.trim();
+    title.textContent = t || 'Your item name';
+    title.classList.toggle('empty', !t);
+    points.replaceChildren();
+    for (const line of round.points) points.append(el('li', '', line));
+    source.textContent = sourceLine(round.source.trim());
+    if (round.image) {
+      if (img.getAttribute('src') !== round.image) img.src = round.image;
+      img.style.display = '';
+      none.style.display = 'none';
+    } else {
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      none.style.display = '';
+    }
+    const p = TPIR.parsePrice(round.price, 'gbp');
+    foot.textContent = 'Final board column: ' + (round.short.trim() || t || '—').toUpperCase() + (p == null ? '' : ' · ' + TPIR.formatPrice(p));
+  }
+  update();
+  return { node: wrap, update };
+}
 function inputField(label, value, onInput, opts) {
   const wrap = el('label', 'cf' + (opts && opts.wide ? ' wide' : '') + (opts && opts.third ? ' third' : ''));
   wrap.append(el('span', '', label));
@@ -996,6 +1062,7 @@ function inputField(label, value, onInput, opts) {
   if (opts && opts.max) input.maxLength = opts.max;
   if (opts && opts.placeholder) input.placeholder = opts.placeholder;
   if (opts && opts.inputmode) input.inputMode = opts.inputmode;
+  if (opts && opts.ref) opts.ref(input);
   input.value = value;
   input.oninput = () => { onInput(input.value); consoleErr = ''; refreshFooter(); if (opts && opts.live) opts.live(); };
   wrap.append(input);
@@ -1109,18 +1176,20 @@ function roundCard(round, index) {
 
   const body = el('div', 'rbody');
   const fields = el('div', 'cgrid');
+  const pv = roundPreview(round);
+  const refs = {};
   const updateHead = () => {
     main.firstChild.textContent = round.title.trim() || 'Untitled round';
     const p = TPIR.parsePrice(round.price, 'gbp');
     main.lastChild.textContent = p == null ? 'No price yet' : TPIR.formatPrice(p);
+    pv.update();
   };
   const ui = webUi[round.id] || (webUi[round.id] = {});
   fields.append(
-    titleField(round, updateHead, ui),
+    titleField(round, updateHead, ui, refs),
     priceField(round, updateHead, ui),
-    inputField('Source', round.source, (v) => { round.source = v; }, { third: true, max: 80, placeholder: 'ASDA' }),
-    inputField('Board label', round.short, (v) => { round.short = v; }, { third: true, max: 24, placeholder: 'Beans', hint: 'Short name for the final board.' }),
-    inputField('Details (one per line)', round.points.join('\n'), (v) => { round.points = v.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8); }, { area: true, rows: 3, wide: true, placeholder: '1 x Sausage Roll' }),
+    inputField('Source', round.source, (v) => { round.source = v; }, { max: 80, placeholder: 'e.g. ASDA website', live: pv.update }),
+    inputField('Board label', round.short, (v) => { round.short = v; }, { max: 24, placeholder: 'Copies the title', live: pv.update, ref: (i) => { refs.short = i; }, hint: 'Follows the title until you type your own. Used as the column name on the final board.' }),
   );
   const music = el('label', 'cf');
   music.append(el('span', '', 'Music'));
@@ -1139,6 +1208,9 @@ function roundCard(round, index) {
   select.onchange = () => { round.audio = select.value; refreshFooter(); };
   music.append(select);
   fields.append(music);
+  fields.append(
+    inputField('Subtext under the title (one line each)', round.points.join('\n'), (v) => { round.points = v.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8); }, { area: true, rows: 3, wide: true, live: pv.update, placeholder: 'Optional small text shown below the main title, one line per bullet. For example: 1 x Sausage Roll', hint: 'Shown as bullet points under the title on the big screen.' }),
+  );
 
   const photo = el('div', 'cf photo');
   photo.append(el('span', '', 'Photo'));
@@ -1184,7 +1256,9 @@ function roundCard(round, index) {
   }
   photo.append(row);
   fields.append(photo);
-  body.append(fields);
+  const left = el('div', 'rleft');
+  left.append(fields);
+  body.append(left, pv.node);
   card.append(body);
   return card;
 }
@@ -1195,7 +1269,7 @@ function webGet(url, options) {
     return data;
   });
 }
-function titleField(round, updateHead, ui) {
+function titleField(round, updateHead, ui, refs) {
   const wrap = el('div', 'cf wide');
   wrap.append(el('span', '', 'Item / question'));
   const row = el('div', 'inline-row');
@@ -1203,7 +1277,17 @@ function titleField(round, updateHead, ui) {
   input.maxLength = 160;
   input.placeholder = 'How much is a tin of beans?';
   input.value = round.title;
-  input.oninput = () => { round.title = input.value; consoleErr = ''; refreshFooter(); updateHead(); };
+  input.oninput = () => {
+    const linked = !round.short || round.short === deriveShort(round.title);
+    round.title = input.value;
+    if (linked) {
+      round.short = deriveShort(round.title);
+      if (refs && refs.short) refs.short.value = round.short;
+    }
+    consoleErr = '';
+    refreshFooter();
+    updateHead();
+  };
   input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); runImageSearch(round, 0, round.title); } };
   const find = el('button', 'btn ghost find-btn', 'Find photo');
   find.type = 'button';
@@ -1295,7 +1379,7 @@ async function pickImage(round, item) {
   renderConsole();
 }
 function priceField(round, updateHead, ui) {
-  const wrap = el('div', 'cf third');
+  const wrap = el('div', 'cf');
   wrap.append(el('span', '', 'Price (£)'));
   const row = el('div', 'inline-row');
   const input = document.createElement('input');

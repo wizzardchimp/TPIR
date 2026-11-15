@@ -1408,3 +1408,25 @@ table.board th.tt { font-size: 0.55em; color: var(--muted); }
 .chip.typical { background: linear-gradient(135deg, #ea8736, #ff4db8); }
 .session-actions.left { justify-content: flex-start; margin-top: 18px; }
 @media (max-width: 720px) { .imggrid { grid-template-columns: 1fr 1fr 1fr; } .imgtile img { height: 90px; } }
+
+/* ===== Round editor: fields on the left, live preview on the right ===== */
+.console input:focus::placeholder, .console textarea:focus::placeholder { color: transparent; }
+.console ::placeholder { color: #8a7f99; font-weight: 600; }
+.rbody { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+.rleft { min-width: 0; }
+.pv { position: sticky; top: 4px; }
+.pv-cap { margin: 0 0 8px; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.pv-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px; background: var(--ink-2); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+.pv-stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: var(--ink-2); overflow: hidden; }
+.pv-stripe { position: absolute; top: 0; right: 0; bottom: 0; width: 40%; background: linear-gradient(180deg, #da3fbd 0%, #e2558e 48%, #e46c56 100%); }
+.pv-copy { position: absolute; left: 90px; top: 115px; width: 653px; }
+.pv-title { margin: 0; font-size: 70px; font-weight: 800; letter-spacing: -0.035em; line-height: 0.92; text-transform: uppercase; overflow-wrap: anywhere; }
+.pv-title.empty { color: rgba(255,255,255,0.28); }
+.pv-points { margin: 16px 0 0; padding-left: 22px; font-weight: 700; font-size: 22px; line-height: 1.35; }
+.pv-points:empty { display: none; }
+.pv-source { margin: 22px 0 0; color: var(--muted); font-size: 22px; font-weight: 500; }
+.pv-hex { position: absolute; right: 96px; top: 50%; transform: translateY(-50%); width: 331px; height: 371px; background: white; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+.pv-hex img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv-none { position: absolute; inset: 0; display: grid; place-items: center; color: #8a7a9a; font-weight: 800; font-size: 26px; }
+.pv-foot { margin: 8px 2px 0; font-size: 0.78rem; font-weight: 700; color: var(--gold); letter-spacing: 0.04em; }
+@media (max-width: 960px) { .rbody { grid-template-columns: 1fr; } .pv { position: static; order: -1; } }
