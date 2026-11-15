@@ -808,6 +808,9 @@ let consoleTab = 'rounds';
 let openRoundId = '';
 let beds = [];
 let consoleErr = '';
+let meta = { setId: 'default', activeSetId: 'default', sets: [], search: false };
+let editingSetId = '';
+const webUi = {}; // per-round photo/price search UI state (not part of the saved draft)
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -823,7 +826,10 @@ function consoleOpen() {
 }
 function loadDraft(settings) {
   beds = settings.beds || [];
+  meta = { setId: settings.setId, activeSetId: settings.activeSetId, sets: settings.sets || [], search: Boolean(settings.search) };
+  editingSetId = settings.setId;
   draft = {
+    setName: settings.setName || '',
     showTitle: settings.showTitle || '',
     showSubtitle: settings.showSubtitle || '',
     tagline: settings.tagline || '',
@@ -845,7 +851,7 @@ function openConsole() {
   consoleErr = '';
   document.getElementById('host-pop').classList.remove('hidden');
   if (draft) renderConsole();
-  socket.emit('host:settings', { token: hostToken });
+  socket.emit('host:settings', { token: hostToken, setId: editingSetId || undefined });
 }
 function closeConsole(force) {
   if (!force && isDirty() && !confirm('You have unsaved changes. Close without saving?')) return;
@@ -853,6 +859,14 @@ function closeConsole(force) {
     draft = JSON.parse(savedSnapshot);
   }
   document.getElementById('host-pop').classList.add('hidden');
+}
+function switchEditingSet(id) {
+  if (id === meta.setId) return;
+  if (isDirty() && !confirm('Discard your unsaved changes to this set?')) return;
+  draft = null;
+  consoleErr = '';
+  openRoundId = '';
+  socket.emit('host:settings', { token: hostToken, setId: id });
 }
 function priceOk(value) {
   return TPIR.parsePrice(value, 'gbp') != null;
@@ -876,7 +890,9 @@ function saveConsole() {
   consoleErr = '';
   socket.emit('host:save', {
     token: hostToken,
+    setId: meta.setId,
     settings: {
+      setName: draft.setName,
       showTitle: draft.showTitle,
       showSubtitle: draft.showSubtitle,
       tagline: draft.tagline,
@@ -918,6 +934,25 @@ function renderConsole() {
   x.onclick = () => closeConsole(false);
   head.append(x);
 
+  const setBar = el('div', 'set-bar');
+  for (const s of meta.sets) {
+    const pill = el('button', 'set-pill' + (s.id === meta.setId ? ' on' : ''));
+    pill.type = 'button';
+    pill.append(el('strong', '', s.id === meta.setId && draft ? draft.setName || s.name : s.name), el('small', '', s.rounds + (s.rounds === 1 ? ' round' : ' rounds')));
+    if (s.active) pill.append(el('em', '', 'LIVE'));
+    pill.onclick = () => switchEditingSet(s.id);
+    setBar.append(pill);
+  }
+  if (meta.setId !== meta.activeSetId) {
+    const play = el('button', 'btn primary sm set-play', 'Play this set');
+    play.type = 'button';
+    play.onclick = () => {
+      if (isDirty()) { consoleErr = 'Save your changes before playing this set.'; refreshFooter(); return; }
+      socket.emit('host:set-active', { token: hostToken, setId: meta.setId });
+    };
+    setBar.append(play);
+  }
+
   const tabs = el('div', 'console-tabs');
   const defs = [['rounds', 'Rounds'], ['show', 'Show'], ['players', 'Players'], ['session', 'Session']];
   for (const [key, label] of defs) {
@@ -949,7 +984,7 @@ function renderConsole() {
   save.onclick = saveConsole;
   foot.append(status, discard, save);
 
-  box.append(head, tabs, body, foot);
+  box.append(head, setBar, tabs, body, foot);
   body.scrollTop = keep;
   refreshFooter();
 }
@@ -972,11 +1007,38 @@ function showPanel() {
   panel.append(el('p', 'sub', 'What appears on the title screen.'));
   const grid = el('div', 'cgrid');
   grid.append(
+    inputField('Set name', draft.setName, (v) => { draft.setName = v; }, { max: 24, wide: true, hint: 'Shown on the set tabs at the top.' }),
     inputField('Show name', draft.showTitle, (v) => { draft.showTitle = v; }, { max: 32 }),
     inputField('Diamond text', draft.showSubtitle, (v) => { draft.showSubtitle = v; }, { max: 32, hint: 'One word per line on the diamond.' }),
     inputField('Tagline', draft.tagline, (v) => { draft.tagline = v; }, { max: 140, wide: true }),
   );
   panel.append(grid);
+  const tools = el('div', 'session-actions left');
+  const exp = el('button', 'btn ghost', 'Export this set (JSON)');
+  exp.type = 'button';
+  exp.title = 'Download a copy you can commit to the sets/ folder in git';
+  exp.onclick = async () => {
+    try {
+      const res = await fetch('/api/sets/' + meta.setId + '/export', { headers: { 'x-host-token': hostToken } });
+      if (!res.ok) throw new Error('Export failed');
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = meta.setId + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { consoleErr = err.message; refreshFooter(); }
+  };
+  const reset = el('button', 'btn danger', 'Reset to original');
+  reset.type = 'button';
+  reset.title = 'Throw away your edits and go back to the version stored in git';
+  reset.onclick = () => {
+    if (!confirm('Reset "' + (draft.setName || meta.setId) + '" to its original version? Your edits to this set are lost.')) return;
+    draft = null;
+    socket.emit('host:set-reset', { token: hostToken, setId: meta.setId });
+  };
+  tools.append(exp, reset);
+  panel.append(tools);
   return panel;
 }
 function roundsPanel() {
@@ -1052,9 +1114,10 @@ function roundCard(round, index) {
     const p = TPIR.parsePrice(round.price, 'gbp');
     main.lastChild.textContent = p == null ? 'No price yet' : TPIR.formatPrice(p);
   };
+  const ui = webUi[round.id] || (webUi[round.id] = {});
   fields.append(
-    inputField('Item / question', round.title, (v) => { round.title = v; }, { max: 160, wide: true, live: updateHead, placeholder: 'How much is a tin of beans?' }),
-    inputField('Price (£)', round.price, (v) => { round.price = v; }, { third: true, inputmode: 'decimal', live: updateHead, placeholder: '0.85', hint: 'Use 0.85 for 85p, or 139 for £139.' }),
+    titleField(round, updateHead, ui),
+    priceField(round, updateHead, ui),
     inputField('Source', round.source, (v) => { round.source = v; }, { third: true, max: 80, placeholder: 'ASDA' }),
     inputField('Board label', round.short, (v) => { round.short = v; }, { third: true, max: 24, placeholder: 'Beans', hint: 'Short name for the final board.' }),
     inputField('Details (one per line)', round.points.join('\n'), (v) => { round.points = v.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8); }, { area: true, rows: 3, wide: true, placeholder: '1 x Sausage Roll' }),
@@ -1124,6 +1187,177 @@ function roundCard(round, index) {
   body.append(fields);
   card.append(body);
   return card;
+}
+function webGet(url, options) {
+  return fetch(url, { ...options, headers: { 'x-host-token': hostToken, 'Content-Type': 'application/json' } }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Search failed');
+    return data;
+  });
+}
+function titleField(round, updateHead, ui) {
+  const wrap = el('div', 'cf wide');
+  wrap.append(el('span', '', 'Item / question'));
+  const row = el('div', 'inline-row');
+  const input = document.createElement('input');
+  input.maxLength = 160;
+  input.placeholder = 'How much is a tin of beans?';
+  input.value = round.title;
+  input.oninput = () => { round.title = input.value; consoleErr = ''; refreshFooter(); updateHead(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); runImageSearch(round, 0, round.title); } };
+  const find = el('button', 'btn ghost find-btn', 'Find photo');
+  find.type = 'button';
+  find.disabled = !meta.search;
+  find.title = meta.search ? 'Search the web for example photos' : 'Needs BRAVE_API_KEY on the server';
+  find.onclick = () => runImageSearch(round, 0, round.title);
+  row.append(input, find);
+  wrap.append(row);
+  if (!meta.search) wrap.append(el('small', '', 'Photo and price search is off. Add BRAVE_API_KEY on the server to turn it on.'));
+  if (ui.img && ui.img.open) wrap.append(imageStrip(round, ui));
+  return wrap;
+}
+function imageStrip(round, ui) {
+  const s = ui.img;
+  const box = el('div', 'imgsearch');
+  const bar = el('div', 'inline-row');
+  const q = document.createElement('input');
+  q.value = s.q;
+  q.placeholder = 'Search words';
+  q.oninput = () => { s.q = q.value; };
+  q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); runImageSearch(round, 0, s.q); } };
+  const go = el('button', 'btn ghost sm', 'Search');
+  go.type = 'button';
+  go.onclick = () => runImageSearch(round, 0, s.q);
+  const more = el('button', 'btn ghost sm', 'Show others');
+  more.type = 'button';
+  more.disabled = s.loading || !(s.pages > 1);
+  more.onclick = () => runImageSearch(round, (s.page || 0) + 1, s.q);
+  const close = el('button', 'icon-btn', '✕');
+  close.type = 'button';
+  close.title = 'Close';
+  close.onclick = () => { s.open = false; renderConsole(); };
+  bar.append(q, go, more, close);
+  box.append(bar);
+  const grid = el('div', 'imggrid');
+  if (s.loading) grid.append(el('p', 'sub', 'Searching…'));
+  else if (s.err) grid.append(el('p', 'err', s.err));
+  for (const item of s.items || []) {
+    const tile = el('button', 'imgtile' + (s.importing === item.id ? ' busy' : ''));
+    tile.type = 'button';
+    tile.title = item.title || item.site;
+    const img = document.createElement('img');
+    img.src = item.thumb;
+    img.alt = item.title || '';
+    img.referrerPolicy = 'no-referrer';
+    img.loading = 'lazy';
+    tile.append(img, el('span', '', s.importing === item.id ? 'Saving…' : item.site || 'Use this'));
+    tile.disabled = Boolean(s.importing);
+    tile.onclick = () => pickImage(round, item);
+    grid.append(tile);
+  }
+  box.append(grid);
+  if ((s.items || []).length) {
+    box.append(el('small', '', 'Click a photo to use it. It is copied to your server. Check you are happy with the licence if you share the show publicly.' + (s.pages > 1 ? ' Page ' + ((s.page || 0) + 1) + ' of ' + s.pages + '.' : '')));
+  }
+  return box;
+}
+async function runImageSearch(round, page, query) {
+  const ui = webUi[round.id] || (webUi[round.id] = {});
+  const q = String(query || '').trim();
+  if (!q) {
+    ui.img = { open: true, q: '', items: [], err: 'Type what you are looking for first.' };
+    renderConsole();
+    return;
+  }
+  ui.img = { open: true, q, page, pages: (ui.img && ui.img.pages) || 0, items: [], loading: true, err: '' };
+  renderConsole();
+  try {
+    const data = await webGet('/api/image-search?q=' + encodeURIComponent(q) + '&page=' + page);
+    ui.img = { open: true, q, page: data.page, pages: data.pages, items: data.items, err: data.items.length ? '' : 'No photos found. Try different words.' };
+  } catch (err) {
+    ui.img = { open: true, q, page, pages: 0, items: [], err: err.message };
+  }
+  renderConsole();
+}
+async function pickImage(round, item) {
+  const ui = webUi[round.id];
+  ui.img.importing = item.id;
+  renderConsole();
+  try {
+    const data = await webGet('/api/image-import', { method: 'POST', body: JSON.stringify({ id: item.id }) });
+    round.image = data.url;
+    ui.img = { open: false };
+    consoleErr = '';
+  } catch (err) {
+    ui.img.importing = '';
+    ui.img.err = err.message;
+  }
+  renderConsole();
+}
+function priceField(round, updateHead, ui) {
+  const wrap = el('div', 'cf third');
+  wrap.append(el('span', '', 'Price (£)'));
+  const row = el('div', 'inline-row');
+  const input = document.createElement('input');
+  input.inputMode = 'decimal';
+  input.placeholder = '0.85';
+  input.value = round.price;
+  input.oninput = () => { round.price = input.value; consoleErr = ''; refreshFooter(); updateHead(); };
+  const ask = el('button', 'btn ghost find-btn', 'Suggest');
+  ask.type = 'button';
+  ask.disabled = !meta.search;
+  ask.title = meta.search ? 'Look up typical prices on the web' : 'Needs BRAVE_API_KEY on the server';
+  ask.onclick = () => runPriceSuggest(round);
+  row.append(input, ask);
+  wrap.append(row);
+  const p = ui.price;
+  if (p) {
+    if (p.loading) wrap.append(el('small', '', 'Looking up prices…'));
+    else if (p.err) wrap.append(el('small', 'bad', p.err));
+    else if (!p.items.length) wrap.append(el('small', '', 'No prices found. Type your own.'));
+    else {
+      const chips = el('div', 'chips');
+      if (p.typical) {
+        const t = el('button', 'chip typical', 'Typical ' + TPIR.formatPrice(p.typical));
+        t.type = 'button';
+        t.onclick = () => usePrice(round, p.typical);
+        chips.append(t);
+      }
+      for (const item of p.items) {
+        const c = el('button', 'chip', TPIR.formatPrice(item.pence) + ' · ' + item.site);
+        c.type = 'button';
+        c.title = item.context;
+        c.onclick = () => usePrice(round, item.pence);
+        chips.append(c);
+      }
+      wrap.append(chips, el('small', '', 'From web results, so check them. Hover for the snippet. Or type your own price.'));
+    }
+  } else if (meta.search) {
+    wrap.append(el('small', '', 'Use 0.85 for 85p, or 139 for £139.'));
+  }
+  return wrap;
+}
+function usePrice(round, pence) {
+  round.price = (pence / 100).toFixed(2);
+  consoleErr = '';
+  renderConsole();
+}
+async function runPriceSuggest(round) {
+  const ui = webUi[round.id] || (webUi[round.id] = {});
+  if (!round.title.trim()) {
+    ui.price = { items: [], err: 'Type the item name first, then press Suggest.' };
+    renderConsole();
+    return;
+  }
+  ui.price = { loading: true, items: [] };
+  renderConsole();
+  try {
+    const data = await webGet('/api/price-suggest?q=' + encodeURIComponent(round.title.trim()));
+    ui.price = { items: data.items, typical: data.typical };
+  } catch (err) {
+    ui.price = { items: [], err: err.message };
+  }
+  renderConsole();
 }
 function playersPanel() {
   const panel = el('div', 'panel');

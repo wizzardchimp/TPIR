@@ -1,0 +1,18 @@
+{
+  "setName": "Set 2",
+  "showTitle": "WMROCU'S",
+  "showSubtitle": "PRICE IS RIGHT",
+  "tagline": "All prices are correct according to host so deal with it....",
+  "rounds": [
+    {
+      "id": "example-set2",
+      "title": "Your first round",
+      "short": "Round 1",
+      "source": "",
+      "points": [],
+      "pricePence": 100,
+      "image": "",
+      "audio": "r1.mp3"
+    }
+  ]
+}

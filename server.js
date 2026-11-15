@@ -24,9 +24,13 @@ function dataDir() {
 
 const DATA = dataDir();
 const UPLOADS = path.join(DATA, 'uploads');
-const SETTINGS_FILE = path.join(DATA, 'settings.json');
+const SETTINGS_FILE = path.join(DATA, 'settings.json'); // legacy single-set file
+const SETS_DIR = path.join(DATA, 'sets');
+const SET_IDS = ['default', 'set2', 'set3'];
+const SET_DEFAULT_NAMES = { default: 'Default', set2: 'Set 2', set3: 'Set 3' };
 const LIVE_FILE = path.join(DATA, 'live.json');
 fs.mkdirSync(UPLOADS, { recursive: true });
+fs.mkdirSync(SETS_DIR, { recursive: true });
 
 function readJson(file) {
   try {
@@ -42,16 +46,42 @@ function writeJson(file, data) {
   fs.renameSync(tmp, file);
 }
 
-function loadSettings() {
-  const saved = readJson(SETTINGS_FILE);
-  const base = saved || readJson(path.join(ROOT, 'data', 'default.json'));
+// Each set has a pristine baseline in git (./sets/<id>.json). Edits are saved as a working copy
+// in the data volume (<DATA>/sets/<id>.json); "Reset" deletes the working copy.
+function normalizeSettings(base, id) {
+  const src = base || {};
   return {
-    showTitle: String(base.showTitle || "WMROCU'S"),
-    showSubtitle: String(base.showSubtitle || 'PRICE IS RIGHT'),
-    tagline: String(base.tagline || ''),
-    contentPack: Number(base.contentPack) || 0,
-    rounds: Array.isArray(base.rounds) ? base.rounds.map(cleanRound) : [],
+    setName: String(src.setName || SET_DEFAULT_NAMES[id] || id).slice(0, 24),
+    showTitle: String(src.showTitle || "WMROCU'S"),
+    showSubtitle: String(src.showSubtitle || 'PRICE IS RIGHT'),
+    tagline: String(src.tagline || ''),
+    rounds: Array.isArray(src.rounds) ? src.rounds.map(cleanRound) : [],
   };
+}
+function baselineSet(id) {
+  return readJson(path.join(ROOT, 'sets', id + '.json'));
+}
+function loadSet(id) {
+  return normalizeSettings(readJson(path.join(SETS_DIR, id + '.json')) || baselineSet(id), id);
+}
+function persistSet(id, data) {
+  try {
+    writeJson(path.join(SETS_DIR, id + '.json'), data);
+  } catch (err) {
+    console.error('Could not save set:', err.message);
+  }
+}
+function setList() {
+  return SET_IDS.map((id) => {
+    const data = id === activeSetId ? settings : loadSet(id);
+    return {
+      id,
+      name: data.setName,
+      rounds: data.rounds.length,
+      active: id === activeSetId,
+      edited: fs.existsSync(path.join(SETS_DIR, id + '.json')),
+    };
+  });
 }
 
 function cleanRound(raw, index) {
@@ -89,7 +119,14 @@ function audioFile() {
   return fs.existsSync(path.join(ROOT, 'r1.mp3')) ? '/audio/r1.mp3' : '';
 }
 
-let settings = loadSettings();
+// One-time move from the old single settings.json into the default set's working copy
+if (!fs.existsSync(path.join(SETS_DIR, 'default.json')) && fs.existsSync(SETTINGS_FILE)) {
+  const legacy = readJson(SETTINGS_FILE);
+  if (legacy) persistSet('default', normalizeSettings(legacy, 'default'));
+}
+const savedActive = readJson(path.join(SETS_DIR, 'active.json'));
+let activeSetId = savedActive && SET_IDS.includes(savedActive.id) ? savedActive.id : 'default';
+let settings = loadSet(activeSetId);
 let phase = 'title';
 let roundIndex = 0;
 let bidsIn = false;
@@ -138,25 +175,7 @@ function loadLive() {
 }
 
 function persistSettings() {
-  try {
-    writeJson(SETTINGS_FILE, settings);
-  } catch (err) {
-    console.error('Could not save settings:', err.message);
-  }
-}
-
-if (/neil/i.test(settings.showTitle) || /Neil/.test(settings.tagline)) {
-  if (/neil/i.test(settings.showTitle)) settings.showTitle = "WMROCU'S";
-  settings.tagline = settings.tagline.replace(/Neil/g, 'host');
-  persistSettings();
-}
-if ((settings.contentPack || 0) < 2) {
-  const fresh = readJson(path.join(ROOT, 'data', 'default.json'));
-  if (fresh && Array.isArray(fresh.rounds)) {
-    settings.rounds = fresh.rounds.map(cleanRound);
-    settings.contentPack = 2;
-    persistSettings();
-  }
+  persistSet(activeSetId, settings);
 }
 
 function persistLive() {
@@ -377,13 +396,20 @@ function checkAllIn() {
   }
 }
 
-function hostSettings() {
+function hostSettings(id) {
+  const setId = SET_IDS.includes(id) ? id : activeSetId;
+  const data = setId === activeSetId ? settings : loadSet(setId);
   return {
-    showTitle: settings.showTitle,
-    showSubtitle: settings.showSubtitle,
-    tagline: settings.tagline,
+    setId,
+    setName: data.setName,
+    activeSetId,
+    sets: setList(),
+    search: webSearch.enabled,
+    showTitle: data.showTitle,
+    showSubtitle: data.showSubtitle,
+    tagline: data.tagline,
     beds: BEDS.filter((name) => fs.existsSync(path.join(ROOT, name))),
-    rounds: settings.rounds.map((round, i) => ({
+    rounds: data.rounds.map((round, i) => ({
       id: round.id,
       title: round.title,
       short: round.short,
@@ -396,7 +422,9 @@ function hostSettings() {
   };
 }
 
-function applySettings(payload) {
+// Validates and saves a set. Returns an error string, or '' on success.
+function applySettings(payload, setId) {
+  if (!SET_IDS.includes(setId)) return 'Unknown set';
   const rounds = Array.isArray(payload.rounds) ? payload.rounds.map(cleanRound) : [];
   if (!rounds.length) return 'Add at least one round';
   const ids = new Set();
@@ -406,20 +434,37 @@ function applySettings(payload) {
     if (!round.title.trim()) return 'Every round needs a name';
     if (round.pricePence > 10000000000) return 'Price is too large';
   }
-  settings = {
+  const next = {
+    setName: String(payload.setName || SET_DEFAULT_NAMES[setId]).trim().slice(0, 24) || SET_DEFAULT_NAMES[setId],
     showTitle: String(payload.showTitle || "WMROCU'S").slice(0, 32),
     showSubtitle: String(payload.showSubtitle || 'PRICE IS RIGHT').slice(0, 32),
     tagline: String(payload.tagline || '').slice(0, 140),
-    contentPack: 2,
     rounds,
   };
-  if (roundIndex >= settings.rounds.length) {
-    roundIndex = 0;
-    phase = 'title';
-    bidsIn = false;
+  persistSet(setId, next);
+  if (setId === activeSetId) {
+    settings = next;
+    if (roundIndex >= settings.rounds.length) {
+      roundIndex = 0;
+      phase = 'title';
+      bidsIn = false;
+    }
   }
-  persistSettings();
   return '';
+}
+
+function activateSet(id) {
+  activeSetId = id;
+  settings = loadSet(id);
+  writeJson(path.join(SETS_DIR, 'active.json'), { id });
+  clearRoundTimer();
+  roundEndsAt = 0;
+  phase = 'title';
+  roundIndex = 0;
+  bidsIn = false;
+  for (const player of players) player.guesses = {};
+  pushCue('title');
+  persistLive();
 }
 
 function lanIP() {
@@ -449,6 +494,9 @@ function baseUrl(req) {
 function joinUrl(req) {
   return `${baseUrl(req)}/${sessionCode}`;
 }
+
+const createWebSearch = require('./websearch');
+const webSearch = createWebSearch({ uploadsDir: UPLOADS });
 
 const app = express();
 app.set('trust proxy', 1);
@@ -499,6 +547,29 @@ app.use(express.static(PUBLIC));
 // Short join link: /ABC -> phone page with the code filled in
 app.get('/:code([A-Za-z]{3})', (req, res) => {
   res.redirect(302, '/play?code=' + encodeURIComponent(req.params.code.toUpperCase()));
+});
+
+function hostOnly(req, res, next) {
+  if (tokenOk(req.get('x-host-token'))) return next();
+  res.status(401).json({ error: 'Host access required' });
+}
+function webError(res, err) {
+  res.status(502).json({ error: err.message || 'Search failed' });
+}
+app.get('/api/image-search', hostOnly, async (req, res) => {
+  try { res.json(await webSearch.imageSearch(req.query.q, req.query.page)); } catch (err) { webError(res, err); }
+});
+app.post('/api/image-import', hostOnly, async (req, res) => {
+  try { res.json({ url: await webSearch.imageImport(req.body && req.body.id) }); } catch (err) { webError(res, err); }
+});
+app.get('/api/price-suggest', hostOnly, async (req, res) => {
+  try { res.json(await webSearch.priceSuggest(req.query.q)); } catch (err) { webError(res, err); }
+});
+app.get('/api/sets/:id/export', hostOnly, (req, res) => {
+  if (!SET_IDS.includes(req.params.id)) return res.status(404).json({ error: 'Unknown set' });
+  const data = req.params.id === activeSetId ? settings : loadSet(req.params.id);
+  res.setHeader('Content-Disposition', 'attachment; filename="' + req.params.id + '.json"');
+  res.json(data);
 });
 
 app.post('/api/upload', (req, res) => {
@@ -626,18 +697,42 @@ io.on('connection', (socket) => {
     socket.emit('host:ok', { token: HOST_TOKEN });
   });
 
-  socket.on('host:settings', ({ token }) => {
+  socket.on('host:settings', ({ token, setId }) => {
     if (!requireHost(socket, token)) return;
-    socket.emit('host:settings', hostSettings());
+    socket.emit('host:settings', hostSettings(setId));
   });
 
-  socket.on('host:save', ({ token, settings: next }) => {
+  socket.on('host:save', ({ token, setId, settings: next }) => {
     if (!requireHost(socket, token)) return;
-    const err = applySettings(next || {});
+    const id = SET_IDS.includes(setId) ? setId : activeSetId;
+    const err = applySettings(next || {}, id);
     if (err) return socket.emit('host:err', err);
     broadcast();
     socket.emit('host:saved');
-    socket.emit('host:settings', hostSettings());
+    socket.emit('host:settings', hostSettings(id));
+  });
+
+  socket.on('host:set-active', ({ token, setId }) => {
+    if (!requireHost(socket, token)) return;
+    if (!SET_IDS.includes(setId)) return socket.emit('host:err', 'Unknown set');
+    if (phase !== 'title') return socket.emit('host:err', 'Go back to the title screen before switching set');
+    if (!loadSet(setId).rounds.length) return socket.emit('host:err', 'That set has no rounds yet');
+    activateSet(setId);
+    broadcast();
+    socket.emit('host:settings', hostSettings(setId));
+  });
+
+  socket.on('host:set-reset', ({ token, setId }) => {
+    if (!requireHost(socket, token)) return;
+    if (!SET_IDS.includes(setId)) return socket.emit('host:err', 'Unknown set');
+    try { fs.unlinkSync(path.join(SETS_DIR, setId + '.json')); } catch { /* nothing saved yet */ }
+    if (setId === activeSetId) {
+      settings = loadSet(setId);
+      if (phase !== 'title' || roundIndex >= settings.rounds.length) activateSet(setId);
+      broadcast();
+    }
+    socket.emit('host:settings', hostSettings(setId));
+    socket.emit('host:saved');
   });
 
   socket.on('host:start', ({ token }) => {
