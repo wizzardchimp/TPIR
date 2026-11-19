@@ -286,11 +286,12 @@ function render() {
     startTitleFx();
     if (!podiumBurst) {
       podiumBurst = true;
-      burstConfetti();
+      celebrate('final');
     }
   } else {
     podiumBurst = false;
     podiumStage = 0;
+    stopFinalLoop();
     stopTitleFx();
   }
 
@@ -410,6 +411,7 @@ function paintRound() {
       badge.classList.remove('pop', 'hold');
       void badge.offsetWidth;
       badge.classList.add('pop');
+      celebrate('reveal');
       setTimeout(() => {
         if (badge.classList.contains('focus')) badge.classList.add('hold');
       }, 600);
@@ -543,11 +545,25 @@ function openRoundResult() {
   if (fresh('scores')) playStinger('scores.mp3', 'scores');
   paintRoundResult();
   paintDock();
+  celebrate('results');
 }
 function showResultsNow() {
   if (!state || state.phase !== 'revealed' || !state.round) return;
   resultFor = state.round.id;
   openRoundResult();
+}
+function paintResultStar(pence) {
+  const star = document.getElementById('result-star');
+  const priceEl = document.getElementById('result-star-price');
+  const text = TPIR.formatPrice(pence);
+  if (priceEl.textContent !== text) {
+    priceEl.textContent = text;
+    star.classList.remove('pop');
+    void star.offsetWidth;
+    star.classList.add('pop');
+  }
+  const w = star.clientWidth || 280;
+  priceEl.style.fontSize = Math.max(22, Math.min(w * 0.27, (w * 0.62) / (text.length * 0.58))) + 'px';
 }
 function paintRoundResult() {
   const pop = document.getElementById('round-result');
@@ -577,10 +593,11 @@ function paintRoundResult() {
   kicker.textContent = 'Round result';
   const heading = document.createElement('h2');
   heading.textContent = state.round.title;
-  const price = document.createElement('p');
-  price.className = 'sub';
-  price.textContent = 'Actual price ' + TPIR.formatPrice(state.round.pricePence);
-  head.append(kicker, heading, price);
+  const sub = document.createElement('p');
+  sub.className = 'sub';
+  sub.textContent = 'Closest without going over wins';
+  head.append(kicker, heading, sub);
+  paintResultStar(state.round.pricePence);
   sheet.append(head);
   const ranked = state.players.map((p) => ({
     name: p.name,
@@ -881,7 +898,6 @@ function onCue(name) {
   if (name === 'reveal' && fresh('reveal')) {
     playStinger('reveal.mp3', 'reveal');
     playStinger('dingding.mp3', 'reveal-ding');
-    burstConfetti();
   }
   if (name === 'end' && fresh('end')) goBed('/audio/end.mp3');
   if (name === 'title') {
@@ -891,6 +907,7 @@ function onCue(name) {
     if (presented) burstConfetti();
   }
   if (name === 'round' && fresh('round') && state.round) goBed(state.round.audio);
+  if (name === 'start') celebrate('start');
   if (name === 'start' && fresh('start')) fadeIntroThenBed(state.startAudio || state.round?.audio || '');
 }
 // ===== Settings console =====
@@ -1648,14 +1665,24 @@ function fxCanvas() {
 function ensureFxLoop() {
   if (fxOn) return;
   fxOn = true;
-  const canvas = fxCanvas();
-  const ctx = canvas.getContext('2d');
+  let lastView = null;
+  let ctx = null;
   function tick() {
     const view = fxCanvas();
     if (!view) return;
+    // The effects canvas changes between screens (round overlay vs final results): follow it and wipe the old one
+    if (view !== lastView) {
+      if (lastView) lastView.getContext('2d').clearRect(0, 0, lastView.width, lastView.height);
+      lastView = view;
+      ctx = view.getContext('2d');
+    }
     ctx.clearRect(0, 0, view.width, view.height);
     fxParts = fxParts.filter((bit) => bit.life > 0 && bit.y < view.height + 40);
     fxParts.forEach((bit) => {
+      if (bit.sway) {
+        bit.t = (bit.t || 0) + 1;
+        bit.x += Math.sin(bit.t * bit.sf + bit.ph) * bit.sway;
+      }
       bit.x += bit.vx;
       bit.y += bit.vy;
       bit.vy += bit.g;
@@ -1669,6 +1696,19 @@ function ensureFxLoop() {
       ctx.fillStyle = bit.c;
       if (bit.spark) {
         ctx.fillRect(-1, -bit.h / 2, 2, bit.h);
+      } else if (bit.kind === 'circle') {
+        ctx.beginPath();
+        ctx.arc(0, 0, bit.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (bit.kind === 'star') {
+        ctx.beginPath();
+        for (let i = 0; i < 10; i += 1) {
+          const rad = i % 2 ? bit.w * 0.22 : bit.w * 0.5;
+          const ang = (Math.PI * i) / 5 - Math.PI / 2;
+          ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+        }
+        ctx.closePath();
+        ctx.fill();
       } else {
         ctx.fillRect(-bit.w / 2, -bit.h / 2, bit.w, bit.h);
       }
@@ -1678,6 +1718,122 @@ function ensureFxLoop() {
     else fxOn = false;
   }
   requestAnimationFrame(tick);
+}
+const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function pickColor() {
+  return fxColors[Math.floor(Math.random() * fxColors.length)];
+}
+function addBit(extra) {
+  fxParts.push(Object.assign({ w: 8, h: 12, vx: 0, vy: 0, g: 0.04, drag: 1, r: 0, vr: 0, c: pickColor(), life: 200, max: 200, spark: false, kind: 'rect' }, extra));
+}
+// A party cannon in a bottom corner: muzzle flash, then confetti, ribbons, stars and dots fired up and inward
+function cannonShot(side, power) {
+  if (calm || !fxFocused()) return;
+  const canvas = fxCanvas();
+  if (!canvas) return;
+  ensureFxLoop();
+  const k = canvas.height / 810;
+  const left = side === 'left';
+  const x = canvas.width * (left ? 0.025 : 0.975);
+  const y = canvas.height + 6;
+  const aim = -Math.PI / 2 + (left ? 0.62 : -0.62);
+  for (let i = 0; i < 18; i += 1) {
+    const a = aim + (Math.random() - 0.5) * 1.3;
+    addBit({ x, y, vx: Math.cos(a) * (4 + Math.random() * 6), vy: Math.sin(a) * (4 + Math.random() * 6), g: 0.1, drag: 0.93, h: 10 + Math.random() * 14, life: 14, max: 14, spark: true, c: '#fff6c8' });
+  }
+  const n = Math.round(80 * power);
+  for (let i = 0; i < n; i += 1) {
+    const a = aim + (Math.random() - 0.5) * 0.7;
+    const speed = (17 + Math.random() * 14) * k * Math.sqrt(power);
+    const roll = Math.random();
+    const kind = roll < 0.18 ? 'ribbon' : roll < 0.3 ? 'circle' : roll < 0.4 ? 'star' : 'rect';
+    const bit = {
+      x: x + (Math.random() - 0.5) * 20, y,
+      vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      g: 0.33 + Math.random() * 0.1, drag: 0.985,
+      r: Math.random() * Math.PI, vr: -0.3 + Math.random() * 0.6,
+      life: 150 + Math.floor(Math.random() * 120), max: 270,
+    };
+    if (kind === 'ribbon') Object.assign(bit, { w: 4, h: 22 + Math.random() * 20, drag: 0.978, g: 0.2, vr: -0.4 + Math.random() * 0.8, sway: 1.1, sf: 0.18, ph: Math.random() * 6 });
+    else if (kind === 'circle') Object.assign(bit, { w: 6 + Math.random() * 6, kind: 'circle' });
+    else if (kind === 'star') Object.assign(bit, { w: 14 + Math.random() * 12, kind: 'star' });
+    else Object.assign(bit, { w: 6 + Math.random() * 8, h: 8 + Math.random() * 12 });
+    addBit(bit);
+  }
+}
+// Ribbons drifting down from the top edge
+function streamers(count) {
+  if (calm || !fxFocused()) return;
+  const canvas = fxCanvas();
+  if (!canvas) return;
+  ensureFxLoop();
+  for (let i = 0; i < count; i += 1) {
+    addBit({
+      x: Math.random() * canvas.width, y: -20 - Math.random() * 160,
+      vx: -0.4 + Math.random() * 0.8, vy: 1.4 + Math.random() * 2.2, g: 0.012, drag: 0.999,
+      w: 5, h: 26 + Math.random() * 34, r: Math.random() * Math.PI, vr: -0.08 + Math.random() * 0.16,
+      sway: 1.4, sf: 0.07 + Math.random() * 0.06, ph: Math.random() * 6, life: 380, max: 380,
+    });
+  }
+}
+// Ring of stars and sparks from one point
+function starBurst(fx, fy, count) {
+  if (calm || !fxFocused()) return;
+  const canvas = fxCanvas();
+  if (!canvas) return;
+  ensureFxLoop();
+  const x = canvas.width * fx;
+  const y = canvas.height * fy;
+  for (let i = 0; i < count; i += 1) {
+    const a = (Math.PI * 2 * i) / count + Math.random() * 0.2;
+    const speed = 5 + Math.random() * 9;
+    const star = i % 3 === 0;
+    addBit({
+      x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, g: 0.1, drag: 0.955,
+      w: star ? 16 + Math.random() * 12 : 3, h: star ? 16 : 14 + Math.random() * 14, kind: star ? 'star' : 'rect', spark: !star,
+      r: a, vr: star ? -0.2 + Math.random() * 0.4 : 0, life: 55 + Math.floor(Math.random() * 40), max: 95,
+      c: i % 2 ? '#fff6c8' : pickColor(),
+    });
+  }
+}
+let finalTimer = 0;
+function stopFinalLoop() {
+  clearInterval(finalTimer);
+  finalTimer = 0;
+}
+// kind: 'reveal' (price lands), 'results' (round table), 'final' (winner), 'start'
+function celebrate(kind) {
+  if (calm) return;
+  const later = (ms, fn) => setTimeout(() => { if (fxFocused()) fn(); }, ms);
+  if (kind === 'reveal') {
+    cannonShot('left', 1);
+    cannonShot('right', 1);
+    later(260, () => starBurst(0.5, 0.5, 44));
+    later(420, () => { cannonShot('left', 0.8); cannonShot('right', 0.8); });
+    later(300, () => streamers(26));
+    later(700, burstConfetti);
+  } else if (kind === 'results') {
+    cannonShot('left', 0.9);
+    cannonShot('right', 0.9);
+    later(380, () => { cannonShot('left', 0.6); cannonShot('right', 0.6); });
+    later(200, () => streamers(14));
+  } else if (kind === 'start') {
+    cannonShot('left', 0.7);
+    cannonShot('right', 0.7);
+  } else if (kind === 'final') {
+    [0, 450, 900].forEach((ms, i) => later(ms, () => { cannonShot('left', 1.1); cannonShot('right', 1.1); if (i) starBurst(0.3 + Math.random() * 0.4, 0.25 + Math.random() * 0.2, 36); }));
+    later(300, () => streamers(40));
+    later(600, () => { launchCannon(); launchCannon(); launchCannon(); });
+    later(1400, burstConfetti);
+    stopFinalLoop();
+    finalTimer = setInterval(() => {
+      if (!state || state.phase !== 'podium' || podiumStage !== 0 || !fxFocused()) return;
+      cannonShot('left', 0.7);
+      cannonShot('right', 0.7);
+      launchCannon();
+      if (Math.random() > 0.5) streamers(10);
+    }, 3200);
+  }
 }
 function burstConfetti() {
   if (!fxFocused()) return;

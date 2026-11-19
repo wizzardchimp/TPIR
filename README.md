@@ -23,6 +23,9 @@ npm start
 ## Game styles
 Settings > Show has four looks: Sunburst, Velvet studio, Wood-grain TV and Disco floor. The choice restyles the whole game (welcome card, title, rounds, price reveal, results, final board and the phones), previews live behind the settings window and is saved per game set (`theme` in the set JSON). Styles live in `public/css/themes.css`; each theme is a block of colour/font tokens (`--t-*`) plus a little decoration.
 
+## Effects
+The price reveal, the round results table and the final winner fire party cannons from both bottom corners (confetti, ribbons, stars, dots), plus streamers, star bursts and fireworks, in the colours of the current theme. The winner screen keeps firing every few seconds. Effects are skipped for visitors who prefer reduced motion.
+
 ## Host name
 The host name typed on the welcome card is session state (cleared by Reset session). It fills `{host}` (Neil's) and `{name}` (Neil) in round titles and the tagline, and the show title unless the set has its own Show name.
 

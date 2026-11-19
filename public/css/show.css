@@ -129,7 +129,7 @@ body.stage {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 26;
+  z-index: 36;
   pointer-events: none;
 }
 .price-scrim {

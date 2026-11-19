@@ -199,6 +199,14 @@
   </div>
   <div id="round-result" class="overlay result-pop hidden">
     <div class="sheet result-sheet" id="result-sheet"></div>
+    <div id="result-star" class="result-star" role="img" aria-label="Actual price">
+      <svg viewBox="0 0 200 200" aria-hidden="true">
+        <polygon class="rs-shape" points="100.0,2.0 113.7,22.2 133.5,7.9 139.5,31.6 163.0,24.9 160.5,49.2 184.9,51.0 174.2,73.0 196.5,83.0 179.0,100.0 196.5,117.0 174.2,127.0 184.9,149.0 160.5,150.8 163.0,175.1 139.5,168.4 133.5,192.1 113.7,177.8 100.0,198.0 86.3,177.8 66.5,192.1 60.5,168.4 37.0,175.1 39.5,150.8 15.1,149.0 25.8,127.0 3.5,117.0 21.0,100.0 3.5,83.0 25.8,73.0 15.1,51.0 39.5,49.2 37.0,24.9 60.5,31.6 66.5,7.9 86.3,22.2"/>
+        <circle class="rs-ring" cx="100" cy="100" r="64"/>
+      </svg>
+      <span class="rs-label">Actual price</span>
+      <strong id="result-star-price" class="rs-price"></strong>
+    </div>
   </div>
   <div id="score-pop" class="overlay hidden">
     <div class="sheet" id="score-sheet"></div>
@@ -219,11 +227,26 @@
     <div class="sheet rules-sheet">
       <p class="kicker">Rules</p>
       <h2>How to play</h2>
-      <ol class="rules-list">
-        <li>Bid the price &mdash; <strong>do not go over</strong>.</li>
-        <li>Closest without going over wins <strong>3 points</strong>.</li>
-        <li>Second closest gets <strong>2 points</strong>; every other valid bid gets <strong>1 point</strong>.</li>
-      </ol>
+      <div class="rules-steps">
+        <div class="rule-step">
+          <span class="step-num">1</span>
+          <svg class="rule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.6" cy="7.6" r="1.4"/><text x="13.4" y="14.6" text-anchor="middle" class="rule-glyph">£</text></svg>
+          <h3>Bid the price</h3>
+          <p>Guess what it costs on your phone. <strong>Go over and you score nothing!</strong></p>
+        </div>
+        <div class="rule-step">
+          <span class="step-num">2</span>
+          <svg class="rule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/><path d="M12 14v4M8 21h8M9.5 18h5"/></svg>
+          <h3>Closest wins</h3>
+          <p>Nearest <strong>without going over</strong> takes <strong>3 points</strong>.</p>
+        </div>
+        <div class="rule-step">
+          <span class="step-num">3</span>
+          <svg class="rule-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5.5"/><path d="M8.6 13.6L7 22l5-3 5 3-1.6-8.4"/><path d="M12 6.4l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z"/></svg>
+          <h3>Everyone scores</h3>
+          <p>Second closest gets <strong>2 points</strong>. Any other bid under the price gets <strong>1</strong>.</p>
+        </div>
+      </div>
       <button type="button" id="rules-continue" class="lobby-start">Start game</button>
     </div>
   </div>
