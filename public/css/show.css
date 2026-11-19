@@ -1434,3 +1434,6 @@ table.board th.tt { font-size: 0.55em; color: var(--muted); }
 .head-btns { display: flex; align-items: center; gap: 10px; }
 
 .sound-off { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #ffb4b4; background: rgba(179,38,79,0.28); border: 1px solid rgba(255,138,138,0.5); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+
+.vol-level { min-width: 1.6em; text-align: right; font-weight: 800; font-size: 0.85rem; color: white; letter-spacing: 0; }
+.vol input { width: 120px; }

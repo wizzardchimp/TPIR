@@ -25,11 +25,13 @@ curtainMusic.loop = true;
 curtainMusic.preload = 'auto';
 let master = 1;
 let mute = 1;        // 1 = sound on, 0 = faded out (toggled with M)
+let duck = 1;        // 0 while N is held (push-to-mute)
+const VOL_MAX = 10;  // volume stages
 let soundOff = false;
 const liveStingers = new Set();
 function setGain(audio, intended) {
   audio._gain = intended;
-  audio.volume = Math.max(0, Math.min(1, intended * master * mute));
+  audio.volume = Math.max(0, Math.min(1, intended * master * mute * duck));
 }
 function playCurtainMusic() {
   setGain(curtainMusic, 0.85);
@@ -177,12 +179,33 @@ function toggleSound() {
     animateMute(1, 1400);
   }
 }
+// Hold N to mute temporarily; release to bring the sound straight back
+let duckAnim = 0;
+let nHeld = false;
+function animateDuck(to, ms) {
+  const from = duck;
+  const t0 = performance.now();
+  cancelAnimationFrame(duckAnim);
+  function frame(now) {
+    const p = Math.min(1, (now - t0) / ms);
+    duck = from + (to - from) * p;
+    applyMaster();
+    if (p < 1) duckAnim = requestAnimationFrame(frame);
+  }
+  duckAnim = requestAnimationFrame(frame);
+}
+function holdMute(on) {
+  if (nHeld === on) return;
+  nHeld = on;
+  document.getElementById('ptm').classList.toggle('hidden', !on);
+  animateDuck(on ? 0 : 1, on ? 90 : 180);
+}
+window.addEventListener('keyup', (e) => { if (e.key === 'n' || e.key === 'N') holdMute(false); });
+window.addEventListener('blur', () => holdMute(false));
 // - and = nudge the volume slider
 function nudgeVolume(step) {
   const slider = document.getElementById('volume');
-  const next = Math.max(0, Math.min(4, Number(slider.value) + step));
-  slider.value = String(next);
-  slider.oninput({ target: slider });
+  setVolumeLevel(Math.max(0, Math.min(VOL_MAX, Number(slider.value) + step)));
 }
 function sourceLine(text) {
   if (!text) return '';
@@ -1808,11 +1831,14 @@ document.getElementById('time-up-min').onclick = () => {
   guessesOpen = true;
   paintGuessList();
 };
-document.getElementById('volume').oninput = (e) => {
-  master = Number(e.target.value) / 4;
-  document.getElementById('curtain-volume').value = e.target.value;
+function setVolumeLevel(level) {
+  master = level / VOL_MAX;
+  document.getElementById('volume').value = String(level);
+  document.getElementById('curtain-volume').value = String(level);
+  document.getElementById('vol-level').textContent = String(level);
   applyMaster();
-};
+}
+document.getElementById('volume').oninput = (e) => setVolumeLevel(Number(e.target.value));
 document.getElementById('score-btn').onclick = toggleGuesses;
 document.getElementById('host-btn').onclick = openConsole;
 document.getElementById('pin-form').onsubmit = (e) => {
@@ -1864,6 +1890,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); holdMute(true); return; }
   if (e.key === '-' || e.key === '_') { e.preventDefault(); nudgeVolume(-1); return; }
   if (e.key === '=' || e.key === '+') { e.preventDefault(); nudgeVolume(1); return; }
   if (e.key === 's' || e.key === 'S') toggleGuesses();
@@ -1951,9 +1978,5 @@ intro.addEventListener('ended', () => {
     intro.play().catch(() => {});
   }
 });
-document.getElementById('curtain-volume').oninput = (e) => {
-  master = Number(e.target.value) / 4;
-  document.getElementById('volume').value = e.target.value;
-  applyMaster();
-};
+document.getElementById('curtain-volume').oninput = (e) => setVolumeLevel(Number(e.target.value));
 playCurtainMusic();

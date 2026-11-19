@@ -18,7 +18,7 @@
       <button type="submit" id="present" class="present-btn" aria-label="Start presentation"><span></span></button>
       <p>Start presentation</p>
       <label class="curtain-vol">Vol
-        <input id="curtain-volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
+        <input id="curtain-volume" type="range" min="0" max="10" step="1" value="10" aria-label="Volume">
       </label>
     </div>
   </form>
@@ -135,10 +135,12 @@
       <span id="dock-label">Next</span><kbd>Space</kbd>
     </button>
     <div class="tool-right">
+      <span id="ptm" class="sound-off hidden">Muted · holding N</span>
       <span id="sound-off" class="sound-off hidden" title="Press M to bring the sound back">Sound off · press M</span>
-      <label class="vol" title="Volume: press - or = to adjust, M to mute and unmute">
+      <label class="vol" title="Volume: press - or = to adjust, M to mute and unmute, hold N to mute while held">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
-        <input id="volume" type="range" min="0" max="4" step="1" value="4" aria-label="Volume">
+        <input id="volume" type="range" min="0" max="10" step="1" value="10" aria-label="Volume">
+        <span id="vol-level" class="vol-level">10</span>
       </label>
       <button type="button" id="host-btn" class="tool-icon" aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
