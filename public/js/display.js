@@ -60,6 +60,7 @@ function hideHint() {
 function playIntro() {
   if (state && state.phase !== 'title') return;
   setGain(intro, 1);
+  if (soundOff) return; // resumed when sound comes back
   intro.play().then(hideHint).catch(() => {
     document.getElementById('sound-hint').classList.remove('hidden');
   });
@@ -92,6 +93,7 @@ async function goBed(url) {
   if (!bed.paused) await fade(bed, 0, 700);
   bed.src = url;
   bedUrl = url;
+  if (soundOff) { setGain(bed, 0.85); return; } // resumed when sound comes back
   setGain(bed, 0);
   try {
     await bed.play();
@@ -113,6 +115,7 @@ async function fadeIntroThenBed(url) {
 }
 function playStinger(file, name) {
   mark(name);
+  if (soundOff) return;
   const a = new Audio('/audio/' + file);
   const prev = bed.paused ? 0.85 : (bed._gain == null ? bed.volume : bed._gain);
   if (!bed.paused) setGain(bed, 0.16);
@@ -139,23 +142,47 @@ function applyMaster() {
   setGain(curtainMusic, curtainMusic._gain == null ? 0.85 : curtainMusic._gain);
   liveStingers.forEach((audio) => setGain(audio, audio._gain == null ? 1 : audio._gain));
 }
-// M key: fade all sound out, press again to fade it back in. The music keeps running underneath.
+// M key: fade sound out and pause the music; press again to resume and fade back in.
 let muteAnim = 0;
-function toggleSound() {
-  soundOff = !soundOff;
+function animateMute(to, ms, done) {
   const from = mute;
-  const to = soundOff ? 0 : 1;
   const t0 = performance.now();
-  const ms = 1400;
   cancelAnimationFrame(muteAnim);
-  document.getElementById('sound-off').classList.toggle('hidden', !soundOff);
   function frame(now) {
     const p = Math.min(1, (now - t0) / ms);
     mute = from + (to - from) * p;
     applyMaster();
     if (p < 1) muteAnim = requestAnimationFrame(frame);
+    else if (done) done();
   }
   muteAnim = requestAnimationFrame(frame);
+}
+// Start whatever should be playing for the current screen
+function resumeAudio() {
+  const go = (a) => { if (a.paused) a.play().then(hideHint).catch(() => {}); };
+  if (!presented) { go(curtainMusic); return; }
+  if (!state || state.phase === 'title') { go(intro); return; }
+  if (bedUrl && bed.src) go(bed);
+}
+function toggleSound() {
+  soundOff = !soundOff;
+  document.getElementById('sound-off').classList.toggle('hidden', !soundOff);
+  if (soundOff) {
+    animateMute(0, 1400, () => {
+      if (!soundOff) return;
+      [intro, bed, curtainMusic].forEach((a) => a.pause());
+    });
+  } else {
+    resumeAudio();
+    animateMute(1, 1400);
+  }
+}
+// - and = nudge the volume slider
+function nudgeVolume(step) {
+  const slider = document.getElementById('volume');
+  const next = Math.max(0, Math.min(4, Number(slider.value) + step));
+  slider.value = String(next);
+  slider.oninput({ target: slider });
 }
 function sourceLine(text) {
   if (!text) return '';
@@ -301,7 +328,7 @@ function startRoundAfterRules() {
   ensureHost(() => {
     hideHint();
     document.getElementById('rules-pop').classList.add('hidden');
-    if (intro.paused) {
+    if (intro.paused && !soundOff) {
       setGain(intro, 0.01);
       intro.play().catch(() => {});
     }
@@ -1837,6 +1864,8 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); nudgeVolume(-1); return; }
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); nudgeVolume(1); return; }
   if (e.key === 's' || e.key === 'S') toggleGuesses();
   if (e.key === 'q' || e.key === 'Q') toggleLobby();
 });
@@ -1917,7 +1946,7 @@ socket.on('host:err', (message) => {
   refreshFooter();
 });
 intro.addEventListener('ended', () => {
-  if (state?.phase === 'title') {
+  if (state?.phase === 'title' && !soundOff) {
     intro.currentTime = 0;
     intro.play().catch(() => {});
   }
