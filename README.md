@@ -17,7 +17,7 @@ npm start
 
 ## Host controls
 - **Space** (or a clicker: Right arrow / Page Down / `.`) always runs the next step: Start game -> Lock bids -> Reveal price -> Show scores -> Next round -> ... -> Reveal board -> New game. The big toolbar button shows what it will do.
-- `S` guesses, `Q` join code, `F` fullscreen. The gear opens Settings (rounds, show text, players, session).
+- `S` guesses, `Q` join code, `F` fullscreen, `M` fades out whatever audio is playing. The gear opens Settings (rounds, show text, players, session). **Reset session** at the top of Settings issues a new room code and disconnects every player.
 - Players join with the QR, `yourdomain/ABC`, or by typing the 3-letter room code on `/play`.
 
 ## Game sets

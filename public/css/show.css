@@ -1430,3 +1430,5 @@ table.board th.tt { font-size: 0.55em; color: var(--muted); }
 .pv-none { position: absolute; inset: 0; display: grid; place-items: center; color: #8a7a9a; font-weight: 800; font-size: 26px; }
 .pv-foot { margin: 8px 2px 0; font-size: 0.78rem; font-weight: 700; color: var(--gold); letter-spacing: 0.04em; }
 @media (max-width: 960px) { .rbody { grid-template-columns: 1fr; } .pv { position: static; order: -1; } }
+
+.head-btns { display: flex; align-items: center; gap: 10px; }

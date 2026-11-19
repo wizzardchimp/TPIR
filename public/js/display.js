@@ -130,6 +130,21 @@ function playStinger(file, name) {
     }
   }, { once: true });
 }
+// M key: fade out whatever audio is playing (music beds, intro, stingers)
+let fadingAll = false;
+async function fadeAllOut() {
+  const playing = [intro, bed, curtainMusic, ...liveStingers].filter((a) => !a.paused);
+  if (!playing.length || fadingAll) return;
+  fadingAll = true;
+  await Promise.all(playing.map((a) => fade(a, 0, 1400)));
+  for (const a of playing) {
+    a.pause();
+    if (a === intro || a === curtainMusic) a.currentTime = 0;
+  }
+  bedUrl = '';
+  setGain(intro, 1);
+  fadingAll = false;
+}
 function sourceLine(text) {
   if (!text) return '';
   if (/^source/i.test(text)) return text;
@@ -877,6 +892,12 @@ function closeConsole(force) {
   }
   document.getElementById('host-pop').classList.add('hidden');
 }
+function resetSession() {
+  if (!confirm('Reset the session? Every player is disconnected and a new room code is created.')) return;
+  fadeAllOut();
+  socket.emit('host:refresh', { token: hostToken });
+  setTimeout(() => location.reload(), 400);
+}
 function switchEditingSet(id) {
   if (id === meta.setId) return;
   if (isDirty() && !confirm('Discard your unsaved changes to this set?')) return;
@@ -945,11 +966,17 @@ function renderConsole() {
 
   const head = el('div', 'console-head');
   head.append(el('h2', '', 'Settings'));
+  const reset = el('button', 'btn danger sm head-reset', 'Reset session');
+  reset.type = 'button';
+  reset.title = 'New room code. Disconnects every player.';
+  reset.onclick = resetSession;
   const x = el('button', 'console-x', '✕');
   x.type = 'button';
   x.setAttribute('aria-label', 'Close');
   x.onclick = () => closeConsole(false);
-  head.append(x);
+  const headBtns = el('div', 'head-btns');
+  headBtns.append(reset, x);
+  head.append(headBtns);
 
   const setBar = el('div', 'set-bar');
   for (const s of meta.sets) {
@@ -1485,11 +1512,7 @@ function sessionPanel() {
   };
   const fresh = el('button', 'btn danger', 'New session (new room code)');
   fresh.type = 'button';
-  fresh.onclick = () => {
-    if (!confirm('Disconnect every player and start a new session with a new room code?')) return;
-    socket.emit('host:refresh', { token: hostToken });
-    setTimeout(() => location.reload(), 200);
-  };
+  fresh.onclick = resetSession;
   actions.append(back, fresh);
   panel.append(actions);
   return panel;
@@ -1805,6 +1828,7 @@ document.addEventListener('keydown', (e) => {
     advance();
     return;
   }
+  if (e.key === 'm' || e.key === 'M') { fadeAllOut(); return; }
   if (e.key === 's' || e.key === 'S') toggleGuesses();
   if (e.key === 'q' || e.key === 'Q') toggleLobby();
 });
