@@ -1830,6 +1830,15 @@ function fillSparkles() {
 }
 fillSparkles();
 let presenterName = '';
+let nameSentAt = 0;
+// The server holds the host's name (it fills {host}/{name} in titles and the tagline, and the phones use it).
+// It needs the host token, so wait for it and keep re-sending until the server echoes the name back.
+function sendHostName(force) {
+  if (!presenterName || !hostToken) return;
+  if (!force && Date.now() - nameSentAt < 1500) return;
+  nameSentAt = Date.now();
+  socket.emit('host:name', { token: hostToken, name: presenterName });
+}
 function possessive(name) {
   const clean = String(name || '').trim();
   if (!clean) return '';
@@ -1842,7 +1851,7 @@ document.getElementById('curtain').onsubmit = (e) => {
     document.getElementById('host-name').focus();
     return;
   }
-  presenterName = name;
+  presenterName = name.replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20); // same cleaning as the server
   const curtain = document.getElementById('curtain');
   curtain.classList.add('fade-out');
   fade(curtainMusic, 0, 800).then(() => {
@@ -1855,7 +1864,7 @@ document.getElementById('curtain').onsubmit = (e) => {
       playIntro();
       burstConfetti();
       startTitleFx();
-      socket.emit('host:name', { name });
+      sendHostName(true);
       render();
     }, 600);
   });
@@ -1963,6 +1972,7 @@ socket.on('state', (next) => {
   const play = booted && seq > lastSeq;
   lastSeq = seq;
   state = next;
+  if (presenterName && next.hostName !== presenterName) sendHostName(false);
   if (!hostToken && next.pinRequired === false && !autoAuthSent) {
     autoAuthSent = true;
     socket.emit('host:auth', { pin: '' });
@@ -1985,6 +1995,7 @@ socket.on('host:ok', ({ token }) => {
   hostToken = token;
   sessionStorage.setItem('tpirHost', token);
   document.getElementById('pin-pop').classList.add('hidden');
+  sendHostName(true);
   paintDock();
   const next = pending;
   pending = null;

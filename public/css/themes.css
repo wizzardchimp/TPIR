@@ -513,3 +513,202 @@ body[data-theme="disco"] .curtain-vol input { padding: 0; background: transparen
 @media (prefers-reduced-motion: reduce) {
 body[data-theme="disco"] #screen-title .spot, body[data-theme="disco"] #screen-title .floor, body[data-theme="disco"] .curtain::before, body[data-theme="disco"] #screen-title .diamond, body[data-theme="disco"] #screen-title .hero-name { animation: none; }
 }
+
+/* =====================================================================
+   Theme tokens for the WHOLE game (rounds, results, final board, phones).
+   :root holds the Sunburst values; the other themes override them.
+   ===================================================================== */
+:root {
+  --t-bg: radial-gradient(900px 640px at 28% 42%, #5a230e 0%, #2e1207 70%);
+  --t-bg-size: auto;
+  --t-stripe: linear-gradient(180deg, #f6b932 0%, #ec7a1c 55%, #c8341f 100%);
+  --t-line: rgba(246, 185, 50, 0.3);
+  --t-g1: #f6b932; --t-g2: #ec7a1c; --t-g3: #c8341f;
+  --t-title: #fff0cf;
+  --t-title-shadow: 2px 2px 0 #c8341f, 5px 5px 0 #3b1a0b, 0 10px 22px rgba(0, 0, 0, 0.4);
+  --t-text: #fff0cf; --t-muted: #e9cfa0; --t-gold: #f6b932;
+  --t-panel: #4a1d0c; --t-panel-a: rgba(35, 13, 5, 0.78); --t-panel-border: rgba(246, 185, 50, 0.45);
+  --t-overlay: rgba(35, 13, 5, 0.74);
+  --t-btn: linear-gradient(135deg, #ec7a1c, #c8341f); --t-btn-text: #fff0cf;
+  --t-badge: #ec7a1c; --t-badge-edge: #3b1a0b; --t-badge-text: #fff0cf;
+  --t-hex-ring: #fff0cf;
+  --t-toolbar: rgba(30, 11, 4, 0.97);
+  --t-timer: linear-gradient(90deg, #f6b932, #ec7a1c, #c8341f);
+  --t-win: linear-gradient(90deg, #ec7a1c, #c8341f);
+  --t-pod-bg: radial-gradient(circle at 50% 30%, #8a2c10 0%, #4a1d0c 50%, #230d05 100%);
+  --t-ray: rgba(246, 185, 50, 0.24);
+  --t-win-name: linear-gradient(180deg, #fff0cf 0%, #f6b932 50%, #ec7a1c 100%);
+  --t-code: linear-gradient(135deg, #f6b932, #ec7a1c);
+  --t-display: var(--r-display);
+  --t-label: var(--r-label);
+}
+body[data-theme="velvet"] {
+  --t-bg: radial-gradient(900px 640px at 40% 35%, #6a1624 0%, #2a080f 75%);
+  --t-stripe: linear-gradient(180deg, #ffd35c 0%, #d4a52a 22%, #8c1d2c 60%, #4a0c17 100%);
+  --t-line: rgba(212, 165, 42, 0.28);
+  --t-g1: #fff3d6; --t-g2: #ffd35c; --t-g3: #d4a52a;
+  --t-title: #fff3d6;
+  --t-title-shadow: 2px 2px 0 #8c1d2c, 5px 5px 0 #1a050b, 0 10px 22px rgba(0, 0, 0, 0.5);
+  --t-text: #fff3d6; --t-muted: #e8cf9c; --t-gold: #ffd35c;
+  --t-panel: #2a0a12; --t-panel-a: rgba(26, 5, 11, 0.82); --t-panel-border: rgba(212, 165, 42, 0.7);
+  --t-overlay: rgba(18, 4, 9, 0.8);
+  --t-btn: linear-gradient(135deg, #d4a52a, #a82a3d); --t-btn-text: #fff3d6;
+  --t-badge: #d4a52a; --t-badge-edge: #3a0b12; --t-badge-text: #2a080f;
+  --t-hex-ring: #d4a52a;
+  --t-toolbar: rgba(18, 4, 9, 0.97);
+  --t-timer: linear-gradient(90deg, #ffd35c, #d4a52a, #a82a3d);
+  --t-win: linear-gradient(90deg, #d4a52a, #a82a3d);
+  --t-pod-bg: radial-gradient(circle at 50% 30%, #8a1f2f 0%, #3a0b12 55%, #12040a 100%);
+  --t-ray: rgba(255, 211, 92, 0.22);
+  --t-win-name: linear-gradient(180deg, #fff3d6 0%, #ffd35c 50%, #d4a52a 100%);
+  --t-code: linear-gradient(135deg, #ffd35c, #d4a52a);
+}
+body[data-theme="tv"] {
+  --t-bg: radial-gradient(circle at 25% 28%, rgba(224, 122, 31, 0.32) 0 11%, transparent 11.6%), radial-gradient(circle at 75% 78%, rgba(224, 122, 31, 0.32) 0 11%, transparent 11.6%), #1f5557;
+  --t-stripe: repeating-linear-gradient(92deg, #7a4a24 0 7px, #6a3d1c 7px 13px, #86542b 13px 22px);
+  --t-bg-size: 150px 150px;
+  --t-line: rgba(243, 230, 196, 0.2);
+  --t-g1: #f3e6c4; --t-g2: #e07a1f; --t-g3: #6b7a2a;
+  --t-title: #f3e6c4;
+  --t-title-shadow: 2px 2px 0 #e07a1f, 5px 5px 0 #3a2210, 0 10px 22px rgba(0, 0, 0, 0.45);
+  --t-text: #f3e6c4; --t-muted: #d9c8a0; --t-gold: #ffd35c;
+  --t-panel: #3a2210; --t-panel-a: rgba(40, 22, 8, 0.85); --t-panel-border: #a06a3a;
+  --t-overlay: rgba(10, 32, 33, 0.78);
+  --t-btn: linear-gradient(135deg, #e07a1f, #b85d10); --t-btn-text: #fff7e0;
+  --t-badge: #e07a1f; --t-badge-edge: #3a2210; --t-badge-text: #fff7e0;
+  --t-hex-ring: #f3e6c4;
+  --t-toolbar: rgba(30, 16, 6, 0.97);
+  --t-timer: linear-gradient(90deg, #e07a1f, #f3e6c4, #6b7a2a);
+  --t-win: linear-gradient(90deg, #e07a1f, #b85d10);
+  --t-pod-bg: radial-gradient(circle at 50% 30%, #2f8b8c 0%, #1d5556 55%, #0f2f30 100%);
+  --t-ray: rgba(243, 230, 196, 0.2);
+  --t-win-name: linear-gradient(180deg, #f3e6c4 0%, #ffd35c 50%, #e07a1f 100%);
+  --t-code: linear-gradient(135deg, #f3e6c4, #e07a1f);
+}
+body[data-theme="disco"] {
+  --t-bg: radial-gradient(circle at 50% 40%, #3a0a48 0%, #14041f 75%);
+  --t-stripe: linear-gradient(180deg, #ff2e93 0%, #b02cd8 55%, #7b2cff 100%);
+  --t-line: rgba(255, 46, 147, 0.38);
+  --t-g1: #ffd23f; --t-g2: #ff9e1f; --t-g3: #ff2e93;
+  --t-title: #ffffff;
+  --t-title-shadow: 0 0 14px #ff2e93, 3px 3px 0 #3a0a48, 0 10px 22px rgba(0, 0, 0, 0.5);
+  --t-text: #ffffff; --t-muted: #e5c3ff; --t-gold: #ffd23f;
+  --t-panel: #1d0a2b; --t-panel-a: rgba(18, 4, 28, 0.82); --t-panel-border: rgba(255, 46, 147, 0.65);
+  --t-overlay: rgba(12, 2, 20, 0.8);
+  --t-btn: linear-gradient(135deg, #ff2e93, #7b2cff); --t-btn-text: #ffffff;
+  --t-badge: #ff2e93; --t-badge-edge: #ffd23f; --t-badge-text: #ffffff;
+  --t-hex-ring: #ffd23f;
+  --t-toolbar: rgba(12, 2, 20, 0.97);
+  --t-timer: linear-gradient(90deg, #ffd23f, #ff2e93, #7b2cff);
+  --t-win: linear-gradient(90deg, #ff2e93, #7b2cff);
+  --t-pod-bg: radial-gradient(circle at 50% 30%, #5a1470 0%, #1d0630 55%, #0a0214 100%);
+  --t-ray: rgba(255, 46, 147, 0.26);
+  --t-win-name: linear-gradient(180deg, #ffffff 0%, #ffd23f 50%, #ff2e93 100%);
+  --t-code: linear-gradient(135deg, #ffd23f, #ff2e93);
+}
+
+/* ----- Round screen ----- */
+#screen-round { background: var(--t-bg); background-size: var(--t-bg-size); color: var(--t-text); }
+.stripe { background: var(--t-stripe); box-shadow: -10px 0 0 rgba(0, 0, 0, 0.18); }
+.round-grid {
+  background-image: linear-gradient(var(--t-line) 1px, transparent 1px), linear-gradient(90deg, var(--t-line) 1px, transparent 1px);
+}
+#mg stop:nth-child(1) { stop-color: var(--t-g1); }
+#mg stop:nth-child(2) { stop-color: var(--t-g2); }
+#mg stop:nth-child(3) { stop-color: var(--t-g3); }
+#item-title {
+  font-family: var(--t-display); font-weight: 400; text-transform: uppercase; letter-spacing: 0; line-height: 1.02;
+  font-size: clamp(2.2rem, 4.9vw, 4.9rem); color: var(--t-title); text-shadow: var(--t-title-shadow); max-width: 12.5em;
+}
+#item-source { font-family: var(--t-label); color: var(--t-muted); font-weight: 400; letter-spacing: 0.04em; }
+.points { font-family: var(--t-label); font-weight: 400; color: var(--t-text); letter-spacing: 0.02em; }
+.points li::marker { color: var(--t-gold); }
+.hex { background: var(--t-hex-ring); filter: drop-shadow(8px 12px 0 rgba(0, 0, 0, 0.28)); }
+.hex img { transform: scale(0.93); clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+.hex.empty::after { color: #7a6a5a; }
+.guess-list { background: var(--t-panel-a); border: 2px solid var(--t-panel-border); color: var(--t-text); }
+.guess-list h2 { font-family: var(--t-display); font-weight: 400; color: var(--t-gold); text-transform: none; letter-spacing: 0.02em; }
+.guess-row { border-bottom-color: var(--t-panel-border); font-family: var(--t-label); font-weight: 400; }
+
+/* ----- Price badge ----- */
+.badge svg path { fill: var(--t-badge); stroke: var(--t-badge-edge); stroke-width: 5; stroke-linejoin: round; }
+.badge span { font-family: var(--t-display); font-weight: 400; letter-spacing: 0; color: var(--t-badge-text); text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35); }
+.badge span.badge-winner { font-family: var(--t-label); font-weight: 400; color: var(--t-badge-text); text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3); }
+.price-scrim { background: var(--t-overlay); opacity: 0.55; }
+
+/* ----- Overlays and sheets ----- */
+.overlay, .qr-full { background: var(--t-overlay); }
+.sheet { background: var(--t-panel); border: 2px solid var(--t-panel-border); color: var(--t-text); box-shadow: 8px 10px 0 rgba(0, 0, 0, 0.35); }
+.sheet h2, .sheet h3 { font-family: var(--t-display); font-weight: 400; letter-spacing: 0.01em; text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3); }
+.sheet .sub, .sheet .kicker, .lobby-sheet .kicker { color: var(--t-gold); font-family: var(--t-label); font-weight: 400; letter-spacing: 0.16em; }
+.result-head { background: var(--t-panel); }
+.result-row { border-bottom-color: var(--t-panel-border); font-family: var(--t-label); font-weight: 400; }
+.result-row.winner { background: var(--t-win); color: var(--t-btn-text); box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.3); }
+.score-row, .lobby-name, .tick { border-bottom-color: var(--t-panel-border); font-family: var(--t-label); font-weight: 400; }
+.rules-list li { font-family: var(--t-label); font-weight: 400; background: rgba(0, 0, 0, 0.22); border-color: var(--t-panel-border); }
+.rules-list strong { color: var(--t-gold); }
+.lobby-start { background: var(--t-btn); color: var(--t-btn-text); font-family: var(--t-label); font-weight: 400; letter-spacing: 0.06em; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3); }
+.sheet .actions button, .btn.primary { background: var(--t-btn); color: var(--t-btn-text); }
+.join-label, .join-info.compact .join-label { color: var(--t-gold); font-family: var(--t-label); font-weight: 400; }
+.join-host { font-family: var(--t-label); font-weight: 400; color: var(--t-text); }
+.join-code-big { font-family: var(--t-display); font-weight: 400; background: var(--t-code); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, 0.35)); }
+
+/* ----- Toolbar and timer ----- */
+.toolbar { background: var(--t-toolbar); border-top: 3px solid var(--t-panel-border); }
+.toolbar .tool-primary { background: var(--t-btn); color: var(--t-btn-text); font-family: var(--t-label); font-weight: 400; letter-spacing: 0.04em; box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35); }
+.toolbar .tool-primary:disabled { background: rgba(255, 255, 255, 0.12); box-shadow: none; }
+.tool-join .session-id { color: var(--t-gold); font-family: var(--t-label); font-weight: 400; }
+.step-round { font-family: var(--t-label); font-weight: 400; color: var(--t-text); }
+.step-state { color: var(--t-muted); }
+.timer-bar span { background: var(--t-timer); }
+
+/* ----- Final results ----- */
+#screen-podium { background: var(--t-pod-bg); }
+.rays { background: repeating-conic-gradient(from 0deg, var(--t-ray) 0 7deg, transparent 7deg 20deg); }
+.winner-card .kicker, .podium-head .kicker { color: var(--t-gold); font-family: var(--t-label); font-weight: 400; }
+.winner-name { font-family: var(--t-display); font-weight: 400; background: var(--t-win-name); -webkit-background-clip: text; background-clip: text; color: transparent; text-transform: none; letter-spacing: 0; }
+.winner-score { font-family: var(--t-label); font-weight: 400; color: var(--t-text); }
+.winner-others { font-family: var(--t-label); font-weight: 400; color: var(--t-muted); }
+.board-stage .podium-head h2 { font-family: var(--t-display); font-weight: 400; color: var(--t-text); text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0; }
+.board-stage .grid-wrap { background: var(--t-panel-a); border: 2px solid var(--t-panel-border); }
+table.board { font-family: var(--t-label); }
+table.board td.nm { font-weight: 400; }
+table.board th { color: var(--t-muted); font-weight: 400; }
+table.board th.rd small, table.board td.tt, table.board th.tt { color: var(--t-gold); }
+table.board tr.winner td { background: var(--t-win); color: var(--t-btn-text); }
+table.board tr.winner td.rk, table.board tr.winner td.tt { color: var(--t-btn-text); }
+
+/* ----- Phones ----- */
+body.handset { background: var(--t-bg); background-size: var(--t-bg-size); background-attachment: fixed; color: var(--t-text); }
+.handset-kicker { color: var(--t-gold); font-family: var(--t-label); font-weight: 400; }
+.handset h1 { font-family: var(--t-display); font-weight: 400; letter-spacing: 0; line-height: 1.02; font-size: clamp(1.7rem, 7.4vw, 2.4rem); color: var(--t-title); text-shadow: var(--t-title-shadow); }
+.handset .source, .handset .hint, .compare span { color: var(--t-muted); font-family: var(--t-label); font-weight: 400; }
+.handset .points { font-family: var(--t-label); font-weight: 400; }
+.handset-hex { background: var(--t-hex-ring); filter: drop-shadow(5px 7px 0 rgba(0, 0, 0, 0.3)); }
+.handset-hex img { transform: scale(0.93); clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+.handset button.primary { background: var(--t-btn); color: var(--t-btn-text); font-family: var(--t-label); font-weight: 400; letter-spacing: 0.06em; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3); border-radius: 16px; }
+.handset button.primary:disabled { opacity: 0.55; }
+.status, .compare div { background: var(--t-panel-a); border: 2px solid var(--t-panel-border); }
+.mini-row { border-bottom-color: var(--t-panel-border); font-family: var(--t-label); font-weight: 400; }
+.money { border: 4px solid var(--t-gold); box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.3); }
+.unit button.on { background: var(--t-gold); color: #1a0a05; }
+.handset .clock { font-family: var(--t-display); font-weight: 400; color: var(--t-gold); }
+.handset .badge span { font-size: 3.2rem; }
+
+/* ----- per-theme decoration on the round screen ----- */
+body[data-theme="velvet"] #screen-round::before, body[data-theme="velvet"] #screen-round::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 4.5%; z-index: 6; pointer-events: none;
+  background: repeating-linear-gradient(90deg, #5a0f1b 0 14px, #9c2234 14px 28px, #701424 28px 42px, #430a14 42px 56px);
+  box-shadow: inset -10px 0 18px rgba(0, 0, 0, 0.5);
+}
+body[data-theme="velvet"] #screen-round::before { left: 0; border-right: 4px solid #d4a52a; }
+body[data-theme="velvet"] #screen-round::after { right: 0; transform: scaleX(-1); border-right: 4px solid #d4a52a; }
+body[data-theme="velvet"] .copy { padding-left: 9vw; }
+body[data-theme="tv"] .hex { background: #3a2210; filter: drop-shadow(8px 12px 0 rgba(0, 0, 0, 0.35)); }
+body[data-theme="tv"] .hex img { transform: scale(0.9); }
+body[data-theme="disco"] #screen-round::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 9%; z-index: 1; pointer-events: none; opacity: 0.55;
+  background: repeating-conic-gradient(#ff2e93 0 25%, #7b2cff 0 50%) 0 0 / 70px 70px; animation: d-tiles 1.2s steps(1) infinite;
+}
+body[data-theme="disco"] .hex { filter: drop-shadow(0 0 22px rgba(255, 46, 147, 0.7)); }
+@media (prefers-reduced-motion: reduce) { body[data-theme="disco"] #screen-round::before { animation: none; } }

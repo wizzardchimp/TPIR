@@ -297,6 +297,7 @@ socket.on('guess:err', (message) => {
   document.getElementById('preview').textContent = message;
 });
 socket.on('state', (next) => {
+  if (next.theme) document.body.dataset.theme = next.theme;
   if (joinCode && next.sessionCode && next.sessionCode !== joinCode) {
     joined = false;
     document.getElementById('play').classList.add('hidden');

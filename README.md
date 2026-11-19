@@ -20,8 +20,11 @@ npm start
 - `S` guesses, `Q` join code, `F` fullscreen, `M` fades sound out and pauses the music, press again to resume and fade in; `-` / `=` lower and raise the volume (10 steps); **hold `N`** to mute while it is held. The gear opens Settings (rounds, show text, players, session). **Reset session** at the top of Settings issues a new room code and disconnects every player.
 - Players join with the QR, `yourdomain/ABC`, or by typing the 3-letter room code on `/play`.
 
-## Welcome screen styles
-Settings > Show has four welcome/title looks: Sunburst, Velvet studio, Wood-grain TV and Disco floor. The choice previews live behind the settings window and is saved per game set (`theme` in the set JSON). Styles live in `public/css/themes.css`.
+## Game styles
+Settings > Show has four looks: Sunburst, Velvet studio, Wood-grain TV and Disco floor. The choice restyles the whole game (welcome card, title, rounds, price reveal, results, final board and the phones), previews live behind the settings window and is saved per game set (`theme` in the set JSON). Styles live in `public/css/themes.css`; each theme is a block of colour/font tokens (`--t-*`) plus a little decoration.
+
+## Host name
+The host name typed on the welcome card is session state (cleared by Reset session). It fills `{host}` (Neil's) and `{name}` (Neil) in round titles and the tagline, and the show title unless the set has its own Show name.
 
 ## Game sets
 There are three sets (Default, Set 2, Set 3). The pristine version of each lives in git in `sets/<id>.json`.
