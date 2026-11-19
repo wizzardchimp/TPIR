@@ -1,7 +1,7 @@
 {
-  "showTitle": "WMROCU'S",
+  "showTitle": "",
   "showSubtitle": "PRICE IS RIGHT",
-  "tagline": "All prices are correct according to host so deal with it....",
+  "tagline": "All prices are correct according to {name} so deal with it....",
   "rounds": [
     {
       "id": "beans",
@@ -48,5 +48,6 @@
       "audio": "r1.mp3"
     }
   ],
-  "setName": "Default"
+  "setName": "Default",
+  "titleVersion": 2
 }

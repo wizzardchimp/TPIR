@@ -1,8 +1,8 @@
 {
   "setName": "Set 3",
-  "showTitle": "WMROCU'S",
+  "showTitle": "",
   "showSubtitle": "PRICE IS RIGHT",
-  "tagline": "All prices are correct according to host so deal with it....",
+  "tagline": "All prices are correct according to {name} so deal with it....",
   "rounds": [
     {
       "id": "example-set3",
@@ -14,5 +14,6 @@
       "image": "",
       "audio": "r1.mp3"
     }
-  ]
+  ],
+  "titleVersion": 2
 }

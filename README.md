@@ -1,4 +1,4 @@
-# WMROCU'S Price Is Right
+# Price Is Right
 
 Party price-guessing show: a big-screen display (`/`) plus phone handsets (`/play`).
 

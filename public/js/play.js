@@ -105,7 +105,8 @@ function paint() {
   paintClock();
   gate.classList.add('hidden');
   play.classList.remove('hidden');
-  document.getElementById('kicker').textContent = ((state?.showTitle || "WMROCU'S") + ' ' + (state?.showSubtitle || '')).trim();
+  document.getElementById('kicker').textContent = ((state?.showTitle ? state.showTitle + ' ' : '') + (state?.showSubtitle || 'Price is Right')).trim();
+  document.title = state?.showTitle ? state.showTitle + ' Price Is Right' : 'Price Is Right';
   const round = state?.round;
   const roundId = round?.id || '';
     if (roundId !== lastRound) {

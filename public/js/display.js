@@ -269,10 +269,15 @@ function showScreen(name) {
 function render() {
   if (!state) return;
   if (!consoleOpen() || !draft) applyTheme(state.theme);
-  document.getElementById('show-name').textContent = presenterName ? possessive(presenterName) : (state.showTitle || "WMROCU'S");
+  // The server decides the title (set override or the host's name); presenterName only bridges the moment before it echoes back
+  const title = state.showTitle || possessive(presenterName);
+  const nameEl = document.getElementById('show-name');
+  nameEl.textContent = title;
+  nameEl.style.display = title ? '' : 'none';
+  document.title = (title ? title + ' ' : '') + 'Price Is Right';
   fitHeroName();
   subtitle(document.getElementById('show-sub'), state.showSubtitle);
-  document.getElementById('tagline').textContent = presenterName ? taglineFor(presenterName) : (state.tagline || '');
+  document.getElementById('tagline').textContent = state.tagline || '';
   paintLobby();
   playDiamond();
   paintRoundTimer();
@@ -1194,9 +1199,9 @@ function showPanel() {
   const grid = el('div', 'cgrid');
   grid.append(
     inputField('Set name', draft.setName, (v) => { draft.setName = v; }, { max: 24, wide: true, hint: 'Shown on the set tabs at the top.' }),
-    inputField('Show name', draft.showTitle, (v) => { draft.showTitle = v; }, { max: 32 }),
+    inputField('Show name', draft.showTitle, (v) => { draft.showTitle = v; }, { max: 32, placeholder: "Uses the host's name", hint: "Leave blank to use the host's name, e.g. Neil's." }),
     inputField('Diamond text', draft.showSubtitle, (v) => { draft.showSubtitle = v; }, { max: 32, hint: 'One word per line on the diamond.' }),
-    inputField('Tagline', draft.tagline, (v) => { draft.tagline = v; }, { max: 140, wide: true }),
+    inputField('Tagline', draft.tagline, (v) => { draft.tagline = v; }, { max: 140, wide: true, placeholder: 'All prices are correct according to {name} so deal with it....', hint: '{name} becomes the host name (Neil), {host} becomes Neil\'s. Blank uses the line above.' }),
   );
   panel.append(grid);
   const tools = el('div', 'session-actions left');
@@ -1829,9 +1834,6 @@ function possessive(name) {
   const clean = String(name || '').trim();
   if (!clean) return '';
   return /s$/i.test(clean) ? clean + "'" : clean + "'s";
-}
-function taglineFor(name) {
-  return 'All prices are correct according to ' + name.trim() + ' so deal with it....';
 }
 document.getElementById('curtain').onsubmit = (e) => {
   e.preventDefault();

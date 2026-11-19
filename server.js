@@ -54,11 +54,20 @@ function normalizeSettings(base, id) {
   return {
     setName: String(src.setName || SET_DEFAULT_NAMES[id] || id).slice(0, 24),
     theme: THEMES.includes(src.theme) ? src.theme : 'sunburst',
-    showTitle: String(src.showTitle || "WMROCU'S"),
+    // Blank show name = use the host's name. Older files had the host's name (or WMROCU'S) written in as the
+    // title, so anything saved before titleVersion 2 is cleared once.
+    titleVersion: 2,
+    showTitle: src.titleVersion === 2 && !/wmrocu/i.test(src.showTitle || '') ? String(src.showTitle || '').trim().slice(0, 32) : '',
     showSubtitle: String(src.showSubtitle || 'PRICE IS RIGHT'),
-    tagline: String(src.tagline || ''),
+    tagline: cleanLegacyTagline(src.tagline),
     rounds: Array.isArray(src.rounds) ? src.rounds.map(cleanRound) : [],
   };
+}
+function cleanLegacyTagline(text) {
+  const t = String(text || '').trim();
+  // the old code generated "All prices are correct according to <name> so deal with it...." for the host
+  if (/^All prices are correct according to .+ so deal with it\.*$/i.test(t) || /wmrocu/i.test(t)) return '';
+  return t.slice(0, 140);
 }
 function baselineSet(id) {
   return readJson(path.join(ROOT, 'sets', id + '.json'));
@@ -139,6 +148,7 @@ let players = [];
 let sessionCode = '';
 let sessionStartedAt = Date.now();
 let lastActivity = Date.now();
+let hostName = ''; // typed on the welcome card; session state, not stored in any set
 const IDLE_WIPE_MS = 3 * 60 * 60 * 1000;
 let cueSeq = 0;
 let cue = { seq: 0, name: '' };
@@ -164,6 +174,7 @@ function loadLive() {
   if (typeof live.sessionCode === 'string' && live.sessionCode) sessionCode = live.sessionCode;
   sessionStartedAt = Number(live.sessionStartedAt) || Date.now();
   lastActivity = Number(live.lastActivity) || sessionStartedAt;
+  hostName = cleanName(live.hostName);
   if (Array.isArray(live.players)) {
     players = live.players.map((p) => ({
       id: safeId(p.id) || crypto.randomUUID(),
@@ -192,6 +203,7 @@ function persistLive() {
       sessionCode,
       sessionStartedAt,
       lastActivity,
+      hostName,
       players: players.map((p) => ({
         id: p.id,
         token: p.token,
@@ -287,13 +299,25 @@ function scoresFor(player, count) {
   return list;
 }
 
-function hostLabel() {
-  const title = String(settings.showTitle || '').trim();
-  return title || "the host's";
+function possessive(name) {
+  const n = String(name || '').trim();
+  if (!n) return '';
+  return /s$/i.test(n) ? n + "'" : n + "'s";
 }
-
+// Show title: the set's own name for the show if it has one, otherwise the host's name
+function displayTitle() {
+  const own = String(settings.showTitle || '').trim();
+  return own || possessive(hostName);
+}
+const DEFAULT_TAGLINE = 'All prices are correct according to {name} so deal with it....';
+// {host} -> Neil's, {name} -> Neil (the host typed on the welcome card)
 function fillTitle(text) {
-  return String(text || '').replaceAll('{host}', hostLabel());
+  return String(text || '')
+    .replaceAll('{host}', possessive(hostName) || "the host's")
+    .replaceAll('{name}', hostName || 'the host');
+}
+function displayTagline() {
+  return fillTitle(String(settings.tagline || '').trim() || (hostName ? DEFAULT_TAGLINE : ''));
 }
 
 function publicState() {
@@ -316,9 +340,10 @@ function publicState() {
     sessionCode,
     pinRequired: PIN_REQUIRED,
     cue,
-    showTitle: settings.showTitle,
+    showTitle: displayTitle(),
     showSubtitle: settings.showSubtitle,
-    tagline: settings.tagline,
+    tagline: displayTagline(),
+    hostName,
     theme: settings.theme,
     startAudio: audioFile(),
     nextAudio: phase === 'revealed' && settings.rounds[roundIndex + 1] ? audioFile() : '',
@@ -442,9 +467,10 @@ function applySettings(payload, setId) {
   const next = {
     setName: String(payload.setName || SET_DEFAULT_NAMES[setId]).trim().slice(0, 24) || SET_DEFAULT_NAMES[setId],
     theme: THEMES.includes(payload.theme) ? payload.theme : 'sunburst',
-    showTitle: String(payload.showTitle || "WMROCU'S").slice(0, 32),
+    titleVersion: 2,
+    showTitle: String(payload.showTitle || '').trim().slice(0, 32),
     showSubtitle: String(payload.showSubtitle || 'PRICE IS RIGHT').slice(0, 32),
-    tagline: String(payload.tagline || '').slice(0, 140),
+    tagline: String(payload.tagline || '').trim().slice(0, 140),
     rounds,
   };
   persistSet(setId, next);
@@ -619,6 +645,7 @@ function startRoundClock() {
 }
 
 function wipeSession(announce) {
+  hostName = '';
   clearRoundTimer();
   roundEndsAt = 0;
   phase = 'title';
@@ -691,10 +718,8 @@ io.on('connection', (socket) => {
     if (!requireHost(socket, token)) return;
     const clean = cleanName(name);
     if (!clean) return;
-    const owned = /s$/i.test(clean) ? clean + "'" : clean + "'s";
-    settings.showTitle = owned.slice(0, 32);
-    settings.tagline = 'All prices are correct according to ' + clean + ' so deal with it....';
-    persistSettings();
+    hostName = clean;
+    persistLive();
     broadcast();
   });
 
