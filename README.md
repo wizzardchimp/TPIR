@@ -20,6 +20,9 @@ npm start
 - `S` guesses, `Q` join code, `F` fullscreen, `M` fades sound out and pauses the music, press again to resume and fade in; `-` / `=` lower and raise the volume (10 steps); **hold `N`** to mute while it is held. The gear opens Settings (rounds, show text, players, session). **Reset session** at the top of Settings issues a new room code and disconnects every player.
 - Players join with the QR, `yourdomain/ABC`, or by typing the 3-letter room code on `/play`.
 
+## Welcome screen styles
+Settings > Show has four welcome/title looks: Sunburst, Velvet studio, Wood-grain TV and Disco floor. The choice previews live behind the settings window and is saved per game set (`theme` in the set JSON). Styles live in `public/css/themes.css`.
+
 ## Game sets
 There are three sets (Default, Set 2, Set 3). The pristine version of each lives in git in `sets/<id>.json`.
 Edits made in the settings console are saved to the data volume (`$DATA_DIR/sets/<id>.json`), so they survive deploys

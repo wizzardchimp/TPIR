@@ -27,6 +27,7 @@ const UPLOADS = path.join(DATA, 'uploads');
 const SETTINGS_FILE = path.join(DATA, 'settings.json'); // legacy single-set file
 const SETS_DIR = path.join(DATA, 'sets');
 const SET_IDS = ['default', 'set2', 'set3'];
+const THEMES = ['sunburst', 'velvet', 'tv', 'disco'];
 const SET_DEFAULT_NAMES = { default: 'Default', set2: 'Set 2', set3: 'Set 3' };
 const LIVE_FILE = path.join(DATA, 'live.json');
 fs.mkdirSync(UPLOADS, { recursive: true });
@@ -52,6 +53,7 @@ function normalizeSettings(base, id) {
   const src = base || {};
   return {
     setName: String(src.setName || SET_DEFAULT_NAMES[id] || id).slice(0, 24),
+    theme: THEMES.includes(src.theme) ? src.theme : 'sunburst',
     showTitle: String(src.showTitle || "WMROCU'S"),
     showSubtitle: String(src.showSubtitle || 'PRICE IS RIGHT'),
     tagline: String(src.tagline || ''),
@@ -317,6 +319,7 @@ function publicState() {
     showTitle: settings.showTitle,
     showSubtitle: settings.showSubtitle,
     tagline: settings.tagline,
+    theme: settings.theme,
     startAudio: audioFile(),
     nextAudio: phase === 'revealed' && settings.rounds[roundIndex + 1] ? audioFile() : '',
     revealedCount: n,
@@ -402,6 +405,8 @@ function hostSettings(id) {
   return {
     setId,
     setName: data.setName,
+    theme: data.theme,
+    themes: THEMES,
     activeSetId,
     sets: setList(),
     search: { images: webSearch.images, prices: webSearch.prices, provider: webSearch.provider },
@@ -436,6 +441,7 @@ function applySettings(payload, setId) {
   }
   const next = {
     setName: String(payload.setName || SET_DEFAULT_NAMES[setId]).trim().slice(0, 24) || SET_DEFAULT_NAMES[setId],
+    theme: THEMES.includes(payload.theme) ? payload.theme : 'sunburst',
     showTitle: String(payload.showTitle || "WMROCU'S").slice(0, 32),
     showSubtitle: String(payload.showSubtitle || 'PRICE IS RIGHT').slice(0, 32),
     tagline: String(payload.tagline || '').slice(0, 140),

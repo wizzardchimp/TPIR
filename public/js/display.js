@@ -268,6 +268,7 @@ function showScreen(name) {
 }
 function render() {
   if (!state) return;
+  if (!consoleOpen() || !draft) applyTheme(state.theme);
   document.getElementById('show-name').textContent = presenterName ? possessive(presenterName) : (state.showTitle || "WMROCU'S");
   fitHeroName();
   subtitle(document.getElementById('show-sub'), state.showSubtitle);
@@ -933,6 +934,7 @@ function loadDraft(settings) {
   editingSetId = settings.setId;
   draft = {
     setName: settings.setName || '',
+    theme: settings.theme || 'sunburst',
     showTitle: settings.showTitle || '',
     showSubtitle: settings.showSubtitle || '',
     tagline: settings.tagline || '',
@@ -948,6 +950,7 @@ function loadDraft(settings) {
     })),
   };
   savedSnapshot = JSON.stringify(draft);
+  if (consoleOpen()) applyTheme(draft.theme);
   if (!draft.rounds.some((r) => r.id === openRoundId)) openRoundId = '';
 }
 function openConsole() {
@@ -962,6 +965,7 @@ function closeConsole(force) {
     draft = JSON.parse(savedSnapshot);
   }
   document.getElementById('host-pop').classList.add('hidden');
+  applyTheme(state && state.theme);
 }
 function resetSession() {
   if (!confirm('Reset the session? Every player is disconnected and a new room code is created.')) return;
@@ -1001,6 +1005,7 @@ function saveConsole() {
     setId: meta.setId,
     settings: {
       setName: draft.setName,
+      theme: draft.theme,
       showTitle: draft.showTitle,
       showSubtitle: draft.showSubtitle,
       tagline: draft.tagline,
@@ -1091,7 +1096,7 @@ function renderConsole() {
   const discard = el('button', 'btn ghost', 'Discard');
   discard.id = 'console-discard';
   discard.type = 'button';
-  discard.onclick = () => { draft = JSON.parse(savedSnapshot); consoleErr = ''; renderConsole(); };
+  discard.onclick = () => { draft = JSON.parse(savedSnapshot); applyTheme(draft.theme); consoleErr = ''; renderConsole(); };
   const save = el('button', 'btn primary', 'Save changes');
   save.id = 'console-save';
   save.type = 'button';
@@ -1169,6 +1174,23 @@ function inputField(label, value, onInput, opts) {
 function showPanel() {
   const panel = el('div', 'panel');
   panel.append(el('p', 'sub', 'What appears on the title screen.'));
+  const picker = el('div', 'themes');
+  picker.append(el('span', 'themes-label', 'Welcome screen style'));
+  const row = el('div', 'theme-row');
+  for (const id of Object.keys(THEME_NAMES)) {
+    const b = el('button', 'theme-chip t-' + id + (draft.theme === id ? ' on' : ''));
+    b.type = 'button';
+    b.append(el('i', 'theme-swatch'), el('span', '', THEME_NAMES[id]));
+    b.onclick = () => {
+      draft.theme = id;
+      applyTheme(id); // live preview on the big screen behind this window
+      consoleErr = '';
+      renderConsole();
+    };
+    row.append(b);
+  }
+  picker.append(row, el('small', '', 'Applies to the welcome card and title screen. Previews live behind this window; press Save changes to keep it.'));
+  panel.append(picker);
   const grid = el('div', 'cgrid');
   grid.append(
     inputField('Set name', draft.setName, (v) => { draft.setName = v; }, { max: 24, wide: true, hint: 'Shown on the set tabs at the top.' }),
@@ -1588,7 +1610,19 @@ function sessionPanel() {
   return panel;
 }
 
-const fxColors = ['#ec7a1c', '#f6b932', '#fff0cf', '#c8341f', '#8a9a2b', '#ffffff', '#ffd35c'];
+const THEME_COLORS = {
+  sunburst: ['#ec7a1c', '#f6b932', '#fff0cf', '#c8341f', '#8a9a2b', '#ffffff', '#ffd35c'],
+  velvet: ['#ffd35c', '#d4a52a', '#fff3d6', '#a82a3d', '#8c1d2c', '#ffffff'],
+  tv: ['#e07a1f', '#f3e6c4', '#6b7a2a', '#2c7a7b', '#ffd35c', '#ffffff'],
+  disco: ['#ff2e93', '#ffd23f', '#ff9e1f', '#7b2cff', '#ffffff'],
+};
+let fxColors = THEME_COLORS.sunburst;
+const THEME_NAMES = { sunburst: 'Sunburst', velvet: 'Velvet studio', tv: 'Wood-grain TV', disco: 'Disco floor' };
+function applyTheme(name) {
+  const theme = THEME_COLORS[name] ? name : 'sunburst';
+  document.body.dataset.theme = theme;
+  fxColors = THEME_COLORS[theme];
+}
 let fxParts = [];
 let fxOn = false;
 let confettiTimer = 0;
