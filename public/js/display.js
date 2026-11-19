@@ -24,10 +24,12 @@ const curtainMusic = new Audio('/audio/end.mp3');
 curtainMusic.loop = true;
 curtainMusic.preload = 'auto';
 let master = 1;
+let mute = 1;        // 1 = sound on, 0 = faded out (toggled with M)
+let soundOff = false;
 const liveStingers = new Set();
 function setGain(audio, intended) {
   audio._gain = intended;
-  audio.volume = Math.max(0, Math.min(1, intended * master));
+  audio.volume = Math.max(0, Math.min(1, intended * master * mute));
 }
 function playCurtainMusic() {
   setGain(curtainMusic, 0.85);
@@ -130,20 +132,30 @@ function playStinger(file, name) {
     }
   }, { once: true });
 }
-// M key: fade out whatever audio is playing (music beds, intro, stingers)
-let fadingAll = false;
-async function fadeAllOut() {
-  const playing = [intro, bed, curtainMusic, ...liveStingers].filter((a) => !a.paused);
-  if (!playing.length || fadingAll) return;
-  fadingAll = true;
-  await Promise.all(playing.map((a) => fade(a, 0, 1400)));
-  for (const a of playing) {
-    a.pause();
-    if (a === intro || a === curtainMusic) a.currentTime = 0;
+// Re-apply the master/mute level to everything that is playing
+function applyMaster() {
+  setGain(intro, intro._gain == null ? 1 : intro._gain);
+  setGain(bed, bed._gain == null ? 0.85 : bed._gain);
+  setGain(curtainMusic, curtainMusic._gain == null ? 0.85 : curtainMusic._gain);
+  liveStingers.forEach((audio) => setGain(audio, audio._gain == null ? 1 : audio._gain));
+}
+// M key: fade all sound out, press again to fade it back in. The music keeps running underneath.
+let muteAnim = 0;
+function toggleSound() {
+  soundOff = !soundOff;
+  const from = mute;
+  const to = soundOff ? 0 : 1;
+  const t0 = performance.now();
+  const ms = 1400;
+  cancelAnimationFrame(muteAnim);
+  document.getElementById('sound-off').classList.toggle('hidden', !soundOff);
+  function frame(now) {
+    const p = Math.min(1, (now - t0) / ms);
+    mute = from + (to - from) * p;
+    applyMaster();
+    if (p < 1) muteAnim = requestAnimationFrame(frame);
   }
-  bedUrl = '';
-  setGain(intro, 1);
-  fadingAll = false;
+  muteAnim = requestAnimationFrame(frame);
 }
 function sourceLine(text) {
   if (!text) return '';
@@ -894,7 +906,6 @@ function closeConsole(force) {
 }
 function resetSession() {
   if (!confirm('Reset the session? Every player is disconnected and a new room code is created.')) return;
-  fadeAllOut();
   socket.emit('host:refresh', { token: hostToken });
   setTimeout(() => location.reload(), 400);
 }
@@ -1773,10 +1784,7 @@ document.getElementById('time-up-min').onclick = () => {
 document.getElementById('volume').oninput = (e) => {
   master = Number(e.target.value) / 4;
   document.getElementById('curtain-volume').value = e.target.value;
-  setGain(intro, intro._gain == null ? 1 : intro._gain);
-  setGain(bed, bed._gain == null ? 0.85 : bed._gain);
-  setGain(curtainMusic, curtainMusic._gain == null ? 0.85 : curtainMusic._gain);
-  liveStingers.forEach((audio) => setGain(audio, audio._gain == null ? 1 : audio._gain));
+  applyMaster();
 };
 document.getElementById('score-btn').onclick = toggleGuesses;
 document.getElementById('host-btn').onclick = openConsole;
@@ -1828,7 +1836,7 @@ document.addEventListener('keydown', (e) => {
     advance();
     return;
   }
-  if (e.key === 'm' || e.key === 'M') { fadeAllOut(); return; }
+  if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
   if (e.key === 's' || e.key === 'S') toggleGuesses();
   if (e.key === 'q' || e.key === 'Q') toggleLobby();
 });
@@ -1917,9 +1925,6 @@ intro.addEventListener('ended', () => {
 document.getElementById('curtain-volume').oninput = (e) => {
   master = Number(e.target.value) / 4;
   document.getElementById('volume').value = e.target.value;
-  setGain(intro, intro._gain == null ? 1 : intro._gain);
-  setGain(bed, bed._gain == null ? 0.85 : bed._gain);
-  setGain(curtainMusic, curtainMusic._gain == null ? 0.85 : curtainMusic._gain);
-  liveStingers.forEach((audio) => setGain(audio, audio._gain == null ? 1 : audio._gain));
+  applyMaster();
 };
 playCurtainMusic();
