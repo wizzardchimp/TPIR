@@ -198,7 +198,7 @@ function holdMute(on) {
   if (nHeld === on) return;
   nHeld = on;
   document.getElementById('ptm').classList.toggle('hidden', !on);
-  animateDuck(on ? 0 : 1, on ? 90 : 180);
+  animateDuck(on ? 0.05 : 1, on ? 220 : 500); // dip to 5% quickly, fade back up on release
 }
 window.addEventListener('keyup', (e) => { if (e.key === 'n' || e.key === 'N') holdMute(false); });
 window.addEventListener('blur', () => holdMute(false));
@@ -253,6 +253,14 @@ function playDiamond() {
   diamondPlayed = false;
   wrap.classList.remove('arrive');
 }
+// Long host names shrink to stay on screen
+function fitHeroName() {
+  const node = document.getElementById('show-name');
+  const len = Math.max(1, node.textContent.length);
+  const px = Math.max(40, Math.min(window.innerWidth * 0.095, (window.innerWidth * 0.82) / (len * 0.66)));
+  node.style.fontSize = px + 'px';
+}
+window.addEventListener('resize', () => { if (state) fitHeroName(); });
 function showScreen(name) {
   screens.title.classList.toggle('active', name === 'title');
   screens.round.classList.toggle('active', name === 'round');
@@ -261,6 +269,7 @@ function showScreen(name) {
 function render() {
   if (!state) return;
   document.getElementById('show-name').textContent = presenterName ? possessive(presenterName) : (state.showTitle || "WMROCU'S");
+  fitHeroName();
   subtitle(document.getElementById('show-sub'), state.showSubtitle);
   document.getElementById('tagline').textContent = presenterName ? taglineFor(presenterName) : (state.tagline || '');
   paintLobby();
@@ -1579,7 +1588,7 @@ function sessionPanel() {
   return panel;
 }
 
-const fxColors = ['#ff4db8', '#ffb15a', '#fff6c8', '#7a5cff', '#6ec8ff', '#ffffff', '#ea8736'];
+const fxColors = ['#ec7a1c', '#f6b932', '#fff0cf', '#c8341f', '#8a9a2b', '#ffffff', '#ffd35c'];
 let fxParts = [];
 let fxOn = false;
 let confettiTimer = 0;
