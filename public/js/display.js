@@ -43,6 +43,17 @@ function stopCurtainMusic() {
   curtainMusic.pause();
   curtainMusic.currentTime = 0;
 }
+// Host-name page: silent by default. M starts the old waiting music (fading in); M again fades it out.
+function toggleCurtainMusic() {
+  if (curtainMusic.paused) {
+    setGain(curtainMusic, 0);
+    curtainMusic.play().then(() => { hideHint(); fade(curtainMusic, 0.85, 700); paintVolIcon(); }).catch(() => {
+      document.getElementById('sound-hint').classList.remove('hidden');
+    });
+  } else {
+    fade(curtainMusic, 0, 700).then(() => { stopCurtainMusic(); paintVolIcon(); });
+  }
+}
 
 const screens = {
   title: document.getElementById('screen-title'),
@@ -123,9 +134,10 @@ function playStinger(file, name) {
   if (!bed.paused) setGain(bed, 0.16);
   setGain(a, 1);
   liveStingers.add(a);
-  a.play().then(hideHint).catch(() => {});
+  a.play().then(() => { hideHint(); paintVolIcon(); }).catch(() => {});
   a.addEventListener('ended', () => {
     liveStingers.delete(a);
+    paintVolIcon();
     if (name === 'scores') {
       if (state && state.phase === 'revealed' && !bed.paused) fade(bed, 0, 600);
       return;
@@ -169,6 +181,7 @@ function resumeAudio() {
 function toggleSound() {
   soundOff = !soundOff;
   document.getElementById('sound-off').classList.toggle('hidden', !soundOff);
+  paintVolIcon();
   if (soundOff) {
     animateMute(0, 1400, () => {
       if (!soundOff) return;
@@ -198,6 +211,7 @@ function holdMute(on) {
   if (nHeld === on) return;
   nHeld = on;
   document.getElementById('ptm').classList.toggle('hidden', !on);
+  paintVolIcon();
   animateDuck(on ? 0.05 : 1, on ? 220 : 500); // dip to 5% quickly, fade back up on release
 }
 window.addEventListener('keyup', (e) => { if (e.key === 'n' || e.key === 'N') holdMute(false); });
@@ -2041,12 +2055,27 @@ document.getElementById('time-up-min').onclick = () => {
   guessesOpen = true;
   paintGuessList();
 };
+function audioPlaying() {
+  return [intro, bed, curtainMusic].some((a) => !a.paused && !a.ended) || liveStingers.size > 0;
+}
+function paintVolIcon() {
+  const level = Math.round(master * VOL_MAX);
+  const waves = level <= 0 ? 0 : level <= 3 ? 1 : level <= 7 ? 2 : 3;
+  const mode = soundOff || level === 0 ? 'muted' : nHeld ? 'ducked' : audioPlaying() ? 'playing' : 'idle';
+  document.querySelectorAll('.vol-ico').forEach((svg) => {
+    svg.dataset.state = mode;
+    svg.dataset.waves = String(nHeld ? Math.min(1, waves) : waves);
+  });
+}
+[intro, bed, curtainMusic].forEach((a) => ['play', 'pause', 'ended'].forEach((ev) => a.addEventListener(ev, paintVolIcon)));
+setInterval(paintVolIcon, 400); // sound effects start and end on their own, so keep the icon honest
 function setVolumeLevel(level) {
   master = level / VOL_MAX;
   document.getElementById('volume').value = String(level);
   document.getElementById('curtain-volume').value = String(level);
   document.getElementById('vol-level').textContent = String(level);
   applyMaster();
+  paintVolIcon();
 }
 document.getElementById('volume').oninput = (e) => setVolumeLevel(Number(e.target.value));
 document.getElementById('score-btn').onclick = toggleGuesses;
@@ -2099,7 +2128,7 @@ document.addEventListener('keydown', (e) => {
     advance();
     return;
   }
-  if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
+  if (e.key === 'm' || e.key === 'M') { if (presented) toggleSound(); else toggleCurtainMusic(); return; }
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); holdMute(true); return; }
   if (e.key === '-' || e.key === '_') { e.preventDefault(); nudgeVolume(-1); return; }
   if (e.key === '=' || e.key === '+') { e.preventDefault(); nudgeVolume(1); return; }
@@ -2191,4 +2220,3 @@ intro.addEventListener('ended', () => {
   }
 });
 document.getElementById('curtain-volume').oninput = (e) => setVolumeLevel(Number(e.target.value));
-playCurtainMusic();

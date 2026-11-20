@@ -1451,3 +1451,24 @@ table.board th.tt { font-size: 0.55em; color: var(--muted); }
 .t-tv .theme-swatch { background: radial-gradient(circle at 50% 50%, #ffe08a 0 22%, #7a4a24 23% 45%, transparent 46%), radial-gradient(circle at 20% 30%, #e07a1f 0 14%, transparent 15%), radial-gradient(circle at 80% 70%, #e07a1f 0 14%, transparent 15%), #2c7a7b; }
 .t-disco .theme-swatch { background: radial-gradient(circle at 50% 50%, #ffd23f 0 16%, #ff2e93 17% 26%, #1c1026 27% 60%, #7b2cff 61%), #14041f; }
 @media (max-width: 720px) { .theme-row { grid-template-columns: repeat(2, 1fr); } }
+
+/* ===== Speaker icon: reflects volume, playing sound, M mute and N dip ===== */
+.vol-ico { width: 24px; height: 24px; flex: none; color: var(--muted); fill: currentColor; stroke: none; overflow: visible; transition: color 0.2s, transform 0.2s; }
+.vol-ico .vi-w, .vol-ico .vi-x { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+.vol-ico .vi-w, .vol-ico .vi-x { display: none; }
+.vol-ico[data-waves="1"] .vi-w1, .vol-ico[data-waves="2"] .vi-w1, .vol-ico[data-waves="2"] .vi-w2,
+.vol-ico[data-waves="3"] .vi-w1, .vol-ico[data-waves="3"] .vi-w2, .vol-ico[data-waves="3"] .vi-w3 { display: inline; opacity: 0.4; }
+.vol-ico[data-state="playing"] { color: var(--t-gold, #f6b932); }
+.vol-ico[data-state="playing"] .vi-w { opacity: 1; animation: vi-wave 0.9s ease-in-out infinite; }
+.vol-ico[data-state="playing"] .vi-w2 { animation-delay: 0.15s; }
+.vol-ico[data-state="playing"] .vi-w3 { animation-delay: 0.3s; }
+@keyframes vi-wave { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.vol-ico[data-state="ducked"] { color: #ff9e1f; transform: scale(0.88); }
+.vol-ico[data-state="ducked"] .vi-w { display: none; }
+.vol-ico[data-state="ducked"][data-waves="1"] .vi-w1, .vol-ico[data-state="ducked"][data-waves="2"] .vi-w1, .vol-ico[data-state="ducked"][data-waves="3"] .vi-w1 { display: inline; opacity: 0.55; animation: none; }
+.vol-ico[data-state="muted"] { color: #ff8a8a; }
+.vol-ico[data-state="muted"] .vi-w { display: none; }
+.vol-ico[data-state="muted"] .vi-x { display: inline; }
+.toolbar .vol .vol-ico { width: 24px; height: 24px; }
+.curtain-vol .vol-ico { width: 26px; height: 26px; }
+@media (prefers-reduced-motion: reduce) { .vol-ico[data-state="playing"] .vi-w { animation: none; } }

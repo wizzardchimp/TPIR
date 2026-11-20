@@ -757,3 +757,6 @@ body[data-theme="disco"] .hex { filter: drop-shadow(0 0 22px rgba(255, 46, 147, 
   .rules-steps { grid-template-columns: 1fr; gap: 34px; }
   .rule-step:not(:last-child)::after { right: auto; left: 50%; top: auto; bottom: -34px; margin: 0 0 0 -15px; width: 30px; height: 26px; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 }
+
+.curtain .curtain-tip { margin: -4px 0 0 !important; font-size: 0.72rem !important; letter-spacing: 0.18em !important; opacity: 0.8; }
+.curtain-vol .vol-ico[data-state="idle"], .curtain-vol .vol-ico[data-state="playing"] { color: inherit; }
