@@ -1231,7 +1231,7 @@ function showPanel() {
   grid.append(
     inputField('Set name', draft.setName, (v) => { draft.setName = v; }, { max: 24, wide: true, hint: 'Shown on the set tabs at the top.' }),
     inputField('Show name', draft.showTitle, (v) => { draft.showTitle = v; }, { max: 32, placeholder: "Uses the host's name", hint: "Leave blank to use the host's name, e.g. Neil's." }),
-    inputField('Diamond text', draft.showSubtitle, (v) => { draft.showSubtitle = v; }, { max: 32, hint: 'One word per line on the diamond.' }),
+    inputField('Subtitle', draft.showSubtitle, (v) => { draft.showSubtitle = v; }, { max: 32, hint: 'Shown in the phone header after the host name. The title screen uses the logo.' }),
     inputField('Tagline', draft.tagline, (v) => { draft.tagline = v; }, { max: 140, wide: true, placeholder: 'All prices are correct according to {name} so deal with it....', hint: '{name} becomes the host name (Neil), {host} becomes Neil\'s. Blank uses the line above.' }),
   );
   panel.append(grid);

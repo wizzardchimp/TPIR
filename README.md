@@ -26,6 +26,9 @@ Settings > Show has four looks: Sunburst, Velvet studio, Wood-grain TV and Disco
 ## Effects
 The price reveal, the round results table and the final winner fire party cannons from both bottom corners (confetti, ribbons, stars, dots), plus streamers, star bursts and fireworks, in the colours of the current theme. The winner screen keeps firing every few seconds. Effects are skipped for visitors who prefer reduced motion.
 
+## Title logo
+The front page shows the Price Is Right logo (`public/img/logo.webp`, transparent background) on every theme, with the host's name above it. Replace that file to change the logo.
+
 ## Host name
 The host name typed on the welcome card is session state (cleared by Reset session). It fills `{host}` (Neil's) and `{name}` (Neil) in round titles and the tagline, and the show title unless the set has its own Show name.
 

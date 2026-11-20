@@ -760,3 +760,35 @@ body[data-theme="disco"] .hex { filter: drop-shadow(0 0 22px rgba(255, 46, 147, 
 
 .curtain .curtain-tip { margin: -4px 0 0 !important; font-size: 0.72rem !important; letter-spacing: 0.18em !important; opacity: 0.8; }
 .curtain-vol .vol-ico[data-state="idle"], .curtain-vol .vol-ico[data-state="playing"] { color: inherit; }
+
+/* =====================================================================
+   Title logo: replaces the "PRICE IS RIGHT" lettering on every theme
+   ===================================================================== */
+.diamond-label { display: none !important; }
+.title-logo {
+  position: relative; z-index: 3; display: block; height: 100%; width: auto; max-width: 100%; object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.45)); user-select: none; pointer-events: none;
+}
+#screen-title .diamond-wrap { margin-top: 7vh; height: min(440px, 58vh); width: min(480px, 52vw); }
+#screen-title .hero-name { top: calc(16% - 80px); z-index: 5; }
+
+/* Sunburst: colour rings around the logo, no seal behind it */
+body[data-theme="sunburst"] #screen-title .diamond { display: none; }
+body[data-theme="sunburst"] #screen-title .diamond-wrap { height: min(400px, 52vh); margin-top: 13vh; }
+body[data-theme="sunburst"] #screen-title .hero::before { top: 61%; width: min(660px, 80vh, 88vw); }
+
+/* Velvet: logo in a gold marquee frame */
+body[data-theme="velvet"] #screen-title .diamond-wrap { width: min(520px, 54vw); height: min(450px, 58vh); }
+body[data-theme="velvet"] #screen-title .diamond { width: 100%; height: 100%; border-radius: 30px; }
+body[data-theme="velvet"] #screen-title .title-logo { height: 86%; filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.55)); }
+
+/* TV: logo shown on the TV screen */
+body[data-theme="tv"] #screen-title .diamond-wrap { width: min(650px, 64vw); height: min(470px, 60vh); }
+body[data-theme="tv"] #screen-title .title-logo { position: absolute; left: 50%; top: 50%; height: 68%; transform: translate(calc(-50% - 10%), -50%); filter: drop-shadow(5px 7px 0 rgba(90, 40, 0, 0.3)); }
+
+/* Disco: logo sitting on the spinning record */
+body[data-theme="disco"] #screen-title .diamond-wrap { width: min(480px, 62vh, 50vw); height: min(480px, 62vh, 50vw); margin-top: 6vh; }
+body[data-theme="disco"] #screen-title .diamond::after { display: none; }
+body[data-theme="disco"] #screen-title .title-logo { position: absolute; left: 50%; top: 50%; height: 74%; transform: translate(-50%, -50%); filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.7)); }
+
+body[data-theme="disco"] #screen-title .hero::before { width: clamp(60px, 10.5vh, 116px); height: clamp(60px, 10.5vh, 116px); top: -7%; }
