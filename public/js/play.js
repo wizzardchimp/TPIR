@@ -296,22 +296,7 @@ socket.on('join:err', (message) => {
 socket.on('guess:err', (message) => {
   document.getElementById('preview').textContent = message;
 });
-// Press the down arrow in the name box (or tap it) for quick picks. Names already in the game are left out.
-const NAME_CHOICES = ['Neil', 'Sarah', 'Craig', 'Becky', 'Lottie'];
-function refreshNameChoices(players) {
-  const taken = new Set((players || []).map((p) => String(p.name).toLowerCase()));
-  const list = document.getElementById('name-choices');
-  list.replaceChildren();
-  for (const name of NAME_CHOICES) {
-    if (taken.has(name.toLowerCase())) continue;
-    const opt = document.createElement('option');
-    opt.value = name;
-    list.append(opt);
-  }
-}
-refreshNameChoices([]);
 socket.on('state', (next) => {
-  refreshNameChoices(next.players);
   if (next.theme) document.body.dataset.theme = next.theme;
   if (joinCode && next.sessionCode && next.sessionCode !== joinCode) {
     joined = false;

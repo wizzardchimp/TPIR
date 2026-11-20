@@ -16,7 +16,8 @@
       <h1 class="welcome-title">Welcome</h1>
       <p class="welcome-sub">TO THE SHOW</p>
       <label class="host-label">Tonight's host
-        <input id="host-name" maxlength="20" autocomplete="name">
+        <input id="host-name" maxlength="20" autocomplete="off" list="host-name-choices">
+        <datalist id="host-name-choices"><option value="Neil"><option value="Sarah"><option value="Craig"><option value="Becky"><option value="Lottie"></datalist>
       </label>
       <button type="submit" id="present" class="present-btn" aria-label="Start presentation"><span></span></button>
       <p>Start the show</p>
